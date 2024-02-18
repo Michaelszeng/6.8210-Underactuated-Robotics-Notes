@@ -56,6 +56,25 @@ Also cause underactuation. i.e. cars can't move sideways $\rightarrow$ doesn't r
 
 # Dynamics of a Simple Pendulum
 
+### Background: Phase Portraits
+
+Phase portraits plot $\dot{q}$ vs $q$, along with a vector field of vectors $[\dot{q}, \ddot{q}]^T$ and repesent the dynamics of the system. We may call the "state vector" $x = [q, \dot{q}]^T$. Then, the vectors in the vector field are all $\dot{x} = [\dot{q}, \ddot{q}]^T$.
+
+This is a simple sliding cart-mass system where, with no external force $u$, there is no $\ddot{q}$:
+
+<center><img src="Media/phase_portrait.png" style="width:40%"/></center><br />
+
+Note that, if there were, say, $u=1$, then there would be a non-zero $\ddot{q}$, then all the vectors would have a slight tilt upward. By providing torques or forces, one can shape the vector field. But only the y-components of each $\dot{x}$ vector--the x-component is fixed at $\dot{q}$.
+
+The vector field symbollically represents the states that the system can get to from the current state. Therefore, valid trajectories must follow the vector field.
+
+In the case of this sliding cart-mass system, the dynamics are simple: $m\ddot{q} = u$. Then, to achieve the desired $\ddot{q}$ at any time, we can just input the correct $u$. Say we want to form a particular vector $\dot{x}^d$ in the vector field; thens pick a $u$ such that $\dot{x}^d = [\dot{q}, \frac{u}{m}]^T$
+
+In the phase portrait above, the red trajectory represents a possible trajectory with the correct control inputs $u$, while the blue trajectory is impossible to achieve. Specifically, at all $x$ on the red trajectory, there is $u$ that points $\dot{x}$ in the direction of the red arrow ($u = -0.25m \dot{q}$), but for the blue trajectory, $u$ cannot influence the x-component of $\dot{x}$, so the x-component of $\dot{x}$ can never point left like the blue arrow does.
+
+
+### Back to the Pendulum.
+
 Equation of motion for a pendulum (solved using Euler Lagrange):
 
 $$ ml^2\ddot{\theta} + b\dot{\theta} + mgl\sin\theta = u $$
@@ -182,3 +201,126 @@ It is locally attractive bc, as you can see, the trajectories on the energy leve
 If we want to account for damping, this can be easily added to the control law: 
 
 $$u = -k \dot{\theta}^2 \tilde{E} + b \dot{\theta}$$
+
+
+<br /><br />
+
+# Control of the Pendulum
+
+## As an Optimization
+
+Consider double integrator system (aka 1D sliding cart):
+
+$$ \ddot{q} = u $$
+
+Our goal will be to bring $\dot{q} = 0$ and $q = 0$ starting from some $\dot{q}(0)$ and $q(0)$.
+
+You can, imagine, with $u=0$, the phase portrait $\dot{q}$ vs $q$ of this system would have a vector field of just horizontal vectors. 
+
+Now, consider a "time-optimal" bang-bang controller (so $u$ can only be -1 or 1). We can express this problem like so:
+
+$$\begin{align*}
+& \text{minimize} 
+& & ~t_f \\
+& \text{subject to}: 
+& & x(t_0) = x_0 \\
+&&& x(t_f) =0 \\
+&&& \ddot{q}(t) = u(t) \\
+&&& |u(t)| = 1
+\end{align*}$$
+
+We will consider this in two separate cases, when $u=1$ and $u=-1$. For $u=-1$:
+
+$$ \ddot{q}(t) = u = -1 $$
+$$ \dot{q}(t) = \dot{q}(0) - t $$
+$$ q(t) = q(0) + \dot{q}(0)t - \frac{1}{2}t^2 $$
+
+For this specific system, the control law is integratable, so we end up with a 1st order ODE (you can substitute to rid of $t$ in the third equation above). This means we can plot its behavior analytically on the phase portrait; we get a bunch of parabolas (the x-offset depends on initial conditions):
+
+<center><img src="Media/double_integrator_u_-1.png" style="width:50%"/></center><br />
+
+When $u=1$, you will find the solution to be the same but mirrored across the y-axis.
+
+As stated above, the goal is to reach $\dot{q} = 0$ and $q = 0$--the origin of this plot, in minimum time. If we consider both $u=1$ and $u=-1$ at the same time, the phase portrait looks like this:
+
+<center><img src="Media/double_integrator.png" style="width:50%"/></center><br />
+
+Note that this drawing intentionally cuts off parts of each parabola to illustrate how the optimal control policy would work. For example, if your initial conditions were at the red star, you would follow $u=-1$ until intersecting with the $u=1$ parabola, at which point switch $u$ to $1$. Notice how there is overshoot in this example; the inital speed was so high that overshoot was unavoidable.
+
+
+## Dynamic Programming (DP)
+
+(aka Value Iteration)
+
+### Discreet Time DP
+
+Additive costs (i.e. that add or are integrated in time), whether for finite or infinite horizons, is easiest to optimize with dynamic programming. For example, a discreet-time minimum time cost is simply (accruing cost so long as we've not acheived our goal):
+
+$$
+    \ell(s_i, a)= 
+\begin{cases}
+    1,& \text{if } s\neq s_{goal}\\
+    0,              & \text{otherwise}
+\end{cases}
+$$
+
+Consider an approximation of optimal control as a graph problem: Discretize state space into a grid of nodes in the phase portrait representing every possible state the system can reach.
+
+Call each node a "state" $s_n$, and each edge to another state "action" $a_n$. Define the transiton function: $s[n+1] = f(s[n], a[n])$, if you move from $s_n$ using action $a_n$ to $s_n+1$.
+
+In DP, you initialize objective $J^*(s)=0$ for all states. Then, you work recursively from $s_0$ to $s_{goal}$, setting $J^*(s)$ at each step: 
+
+$$ \forall i ~J^*(s_i) = \min_{a \in A} \left[ \ell(s_i, a) + J^*(f(s_i, a)) \right]$$
+
+where $\ell(s_i, a)$ is the cost for state action pair $s_i, a$.
+
+We call this the "cost-to-go" function--it describes the cost of each action at the current state, and therefore allows you to find the best action.
+
+Basically, the cost at the current state is equal to the minimum cost at the next state plus the cost to transition from current to next.
+
+Also note, $J^*$ would be a vector with dimension equal to the dimension of the state.
+
+When using the algorithm, you can also solve without a specific $s_0$; you can allow the recursion to continue until $J^*(s)$ converges (stops updating) for all $s$; the the real cost of each possible state has been globally computed.
+
+**Limitations**:
+ - Accuracy loss due to discretization errors (which propogate out further from the goal state)
+ - Lack of scalability due to massive state spaces (only practical for $\leq 6$ dimensions)
+ - Known state transitions & costs
+ - Requires "full state" feedback
+
+
+### Continuous State, Action, Time DP
+
+General principle: take $\lim_{t \to \infty}$.
+
+Rather than a discreet state transition function like $f()$ above, we have:
+
+$$ \dot{x}(t) = f_c(x(t), u(t)) $$
+
+(The $f_c$ subscript denotes "continuous" for clarity).
+
+The long-term cost is, instead of a sum over discreet time steps, is an integral of the cost function over dt:
+
+$$ \int l_c(x, u) dt $$
+
+$J^*(x)$ is still the optimal cost-to-go at state $x$, and satisfies:
+
+$$ \forall x ~ 0=\min_u [l(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u)]$$
+
+This equation is known as Hamilton-Jacobi-Bellman (HJB) equation. It's quite unintuitive; so, an informal derivation:
+
+$$ x[n+1] \approx x[n] + dt*f_c(x[n], u[n]) $$
+
+(this is simply a discreet approximation of continuous space using a small $dt$).
+
+$$ J^*(x) = \min_u [dt*l(x, u) + J^*(x + dt*f_c(x, u))] $$
+
+Using a first-order Taylor Expansion, we can approximate $ J^*(x + dt*f_c(x, u))$ as $J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)$. Plugging this in above:
+
+$$ J^*(x) = \min_u [dt*l(x, u) + J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)] $$
+
+With this step done, we've now separated $J^*$ into $J^*(x)$, which is not dependent on $u$, from the part of $J^*$ that is dependent on $u$. On the right side of the eqution, we can pull $J^*(x)$ out of the $\min_u$ operator, and cancel it from the left side of the equation. We can also pull the $dt$ multiplier out, since this is also independent of $u$, and this divide this term out. We are left with the HJB equation above:
+
+$$ 0 = \min_u [l(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u)] $$
+
+### Applying HJB on Cart Mass System (Double Integrator)
