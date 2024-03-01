@@ -306,62 +306,13 @@ The long-term cost is, instead of a sum over discreet time steps, is an integral
 
 $$ \int l_c(x, u) dt $$
 
-The Hamilton-Jacobi-Bellman (HJB) equation is used to calculate the optimal control action $u$. It's quite unintuitive how you would use this equation; the short answer is: you find the input $u$ that makes the HJB equation true. As explained more later, this can be solved quite easily for certain types of sytems (i.e. if the right side of the equation quadratic in $u$, you can solve for the minimum by setting the 1st derivative to $0$).
+To solve for the optimal control action $u$ given, we need to do two things; first, we must solve for the optimal cost-to-go function $J^*(x)$ using value iteration,then we use the Hamilton-Jacobi-Bellman (HJB) equation to solve for $u$ using the optimal cost-to-go function:
 
 $$ \forall x ~ 0=\min_u \bigg [\ell(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u) \bigg ]$$
 
-($J^*(x)$ is still the optimal cost-to-go at state $x$)
+First, we will show how to solve for $u$, assuming we know $J^*(x)$. This is simply a matter of solving the optimization problem that is the HJB equation (finding $u$ to mininimize the right-hand-side).
 
-HJB is quite unintuitive; so, an informal derivation:
-
-$$ x[n+1] \approx x[n] + dt*f_c(x[n], u[n]) $$
-
-(this is simply a discreet-time approximation of continuous space using a small $dt$).
-
-$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x + dt*f_c(x, u)) \bigg ] $$
-
-Using a first-order Taylor Expansion, we can approximate $ J^*(x + dt*f_c(x, u))$ as $J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)$. Plugging this in above:
-
-$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u) \bigg ] $$
-
-With this step done, we've now separated $J^*$ into $J^*(x)$, which is not dependent on $u$, from the part of $J^*$ that is dependent on $u$. On the right side of the eqution, we can pull $J^*(x)$ out of the $\min_u$ operator, and cancel it from the left side of the equation. We can also pull the $dt$ multiplier out, since this is also independent of $u$, and this divide this term out. We are left with the HJB equation above:
-
-$$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u) \bigg ] $$
-
-### Applying HJB on Cart Mass System (Double Integrator)
-
-Now, we will see an example of how to use HJB to validate that a control policy is optimal. Any optimal control policy will satisfy the HJB equation.
-
-Once again, the goal of the Cart Mass System problem is to keep the mass at the origin.
-
-Let's say this is our cost (quadratic in state variables and effort):
-
-$$ \ell(x, u) = q^2 + \dot{q}^2 + u^2 $$
-
-We will try to validate this optimal controller:
-
-$$ u^*(x) = -q - \sqrt{3} \dot{q} $$
-
-To do this, we need a known cost-to-go function:
-
-$$ J(x) = \sqrt{3} q^2 + 2q\dot{q} + \sqrt{3}\dot{q}^2 $$
-
-We will now prove our $u^*$ by plugging this cost-to-go function into HJB and seeing that we get $u^*$ back.
-
-<center><img src="Media/HJB_double_integrator.png" style="width:90%"/></center><br />
-
-This math involves partial derivatives of a scalar function with respect to vectors. Just trust that this is how it works. The derivative of a scalar function wrt vectors creates a row vector. The double integrator has dynamics $f(x, u) = \begin{bmatrix}
-\dot{q} \\
-u 
-\end{bmatrix}$ (recall that $f(x, u) = \dot{x}$ by definition), so $\frac{\delta J}{\delta x} f(x, u)$ is equal to the blob on the right side of the equation.
-
-Now, we need to find $u$ to minimize the equation above (as required by HJB). To do so, we take the gradent of the equation with respect to $u$, set it equal to 0, and we will find $u = -q - \sqrt{3} \dot{q} $, the optimal controller we defined above.
-
-### HJB as an Algorithm
-
-Now, we see how to use HJB to actually solve for the optimal control policy $u$ without knowing the cost-to-go beforehand.
-
-One of the first challenges to resolve is the $\min_u$. In the discreet DP algorithm, we could evaluate over all possible actions and pick the best. In continuous action space, this is not possible. Either we need to solve for $u$ analytically or use numerical methods (like gradient descent). We will take a look at a special case where we can solve for $u$ analytically: the system must be "control affine", meaing that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
+In the discreet time/state/action DP algorithm, we could evaluate over all possible $u$ and pick the best. In continuous action space, this is not possible. Either we need to solve for $u$ analytically or use numerical methods (like gradient descent). We will take a look at a special case where we can solve for $u$ analytically: the system must be "control affine", meaing that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
 
 $$ f(x, y) =  f_1(x) + f_2(x)u $$
 
@@ -390,7 +341,37 @@ Now, we are able to find the optimal $u^*$ for any given cost function and state
 What happens if the cost function is not quadratic or the dynamics are not control affine? Then you can't solve for $u$ by just setting the gradient of HJB to 0. One workout is, every iteration of the algorithm, you could take a positive-definite quadratic approximation in $u$ of the HJB and then solve for $u^*$. Alternatively, use numerical optimization methods like gradient descent to solve for $u$.
 
 
-## Value Iteration with a Neural Network (Discreet time, continuous state)
+### Example: HJB on Cart Mass System (Double Integrator)
+
+Now, we will see an example of how to use HJB to solve for $u^*$ for controlling a cart mass system.
+
+Once again, the goal of the Cart Mass System problem is to keep the mass at the origin.
+
+Let's say this is our cost (quadratic in state variables and effort):
+
+$$ \ell(x, u) = q^2 + \dot{q}^2 + u^2 $$
+
+And let's say we've already solved for the optimal cost-to-go function:
+
+$$ J(x) = \sqrt{3} q^2 + 2q\dot{q} + \sqrt{3}\dot{q}^2 $$
+
+We will now prove our $u^*$ by plugging this cost-to-go function into HJB and seeing that we get $u^*$ back.
+
+<center><img src="Media/HJB_double_integrator.png" style="width:90%"/></center><br />
+
+This math involves partial derivatives of a scalar function with respect to vectors. Just trust that this is how it works. The derivative of a scalar function wrt vectors creates a row vector. The double integrator has dynamics $f(x, u) = \begin{bmatrix}
+\dot{q} \\
+u 
+\end{bmatrix}$ (recall that $f(x, u) = \dot{x}$ by definition), so $\frac{\delta J}{\delta x} f(x, u)$ is equal to the blob on the right side of the equation.
+
+Now, we need to find $u$ to minimize the equation above (as required by HJB). To do so, we take the gradent of the equation with respect to $u$, set it equal to 0, and we will find $u* = -q - \sqrt{3} \dot{q} $, the optimal controller.
+
+
+## Solving for $J^*(x)$ using Value Iteration
+
+Now, it's clear how HJB can solve for $u^*$ given $J^*(x)$; but how do we calculate the function $J^*(x)$ in the first place?
+
+### Value Iteration with a Neural Network (Discreet time, continuous state)
 
 We define the estimated optimal cost-to-go as $\hat{J_\alpha}(x) $.
 
@@ -413,6 +394,26 @@ This approach works well when $\hat{J}_\alpha^*(x)$ is approximated as a linear 
 $$ \hat{J}_\alpha^*(x) = \sum_i \alpha_i \phi(x) ~~~~~~~~~\text{vector form: } \hat{J}_\alpha^*(x)=\phi^T(x)\alpha$$
 
 where $\phi^T(x)$ is a column vector of nonlinear features.
+
+
+### An Aside: Informal derivation of HJB
+
+HJB is quite unintuitive; so, an informal derivation:
+
+$$ x[n+1] \approx x[n] + dt*f_c(x[n], u[n]) $$
+
+(this is simply a discreet-time approximation of continuous space using a small $dt$).
+
+$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x + dt*f_c(x, u)) \bigg ] $$
+
+Using a first-order Taylor Expansion, we can approximate $ J^*(x + dt*f_c(x, u))$ as $J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)$. Plugging this in above:
+
+$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u) \bigg ] $$
+
+With this step done, we've now separated $J^*$ into $J^*(x)$, which is not dependent on $u$, from the part of $J^*$ that is dependent on $u$. On the right side of the eqution, we can pull $J^*(x)$ out of the $\min_u$ operator, and cancel it from the left side of the equation. We can also pull the $dt$ multiplier out, since this is also independent of $u$, and this divide this term out. We are left with the HJB equation above:
+
+
+$$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u) \bigg ] $$
 
 
 <br /><br />
