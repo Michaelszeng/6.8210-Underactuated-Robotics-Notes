@@ -8,7 +8,7 @@ $$ \ddot{q} = f(q, \dot{q}, u, t) $$
 
 $q$ = state vector, $u$ = control command. For a fully actuated dsystem, $f$ is surjective; for each $\ddot{q}$ there exists a $u$. This is not true for underactuated systems.
 
-Actually, dynamics of many robots is linear in torque with an added constant, so we re-express the dynamics:
+Actually, dynamics of many robots is linear in torque with an added constant not dependent on $u$, so we re-express the dynamics:
 
 $$ \ddot{q} = f_1(q, \dot{q}, t) + f_2(q, \dot{q}, t)u $$
 
@@ -268,17 +268,15 @@ Consider an approximation of optimal control as a graph problem: Discretize stat
 
 Call each node a "state" $s_n$, and each edge to another state "action" $a_n$. Define the transiton function: $s[n+1] = f(s[n], a[n])$, if you move from $s_n$ using action $a_n$ to $s_n+1$.
 
-In DP, you initialize objective $J^*(s)=0$ for all states. Then, you work recursively from $s_0$ to $s_{goal}$, setting $J^*(s)$ at each step: 
+In DP, you initialize objective $J^*(s)=0$ for all states. Then, you work recursively from $s_0$ to $s_{goal}$, setting $J^*(s_i)$ (a constant) at each step: 
 
 $$ \forall i ~J^*(s_i) = \min_{a \in A} \left[ \ell(s_i, a) + J^*(f(s_i, a)) \right]$$
 
 where $\ell(s_i, a)$ is the cost for state action pair $s_i, a$.
 
-We call this the "cost-to-go" function--it describes the cost of each action at the current state, and therefore allows you to find the best action.
+We call this the "cost-to-go" function--it describes the cost of each action at the current state, and therefore allows you to find the best action. $J^*(s_i)$ is the optimal cost-to-go, which is the minimum possible cost incurred from taking an action at state $s_i$.
 
 Basically, the cost at the current state is equal to the minimum cost at the next state plus the cost to transition from current to next.
-
-Also note, $J^*$ would be a vector with dimension equal to the dimension of the state.
 
 When using the algorithm, you can also solve without a specific $s_0$; you can allow the recursion to continue until $J^*(s)$ converges (stops updating) for all $s$; the the real cost of each possible state has been globally computed.
 
@@ -291,36 +289,302 @@ When using the algorithm, you can also solve without a specific $s_0$; you can a
 
 ### Continuous State, Action, Time DP
 
-General principle: take $\lim_{t \to \infty}$.
-
 Rather than a discreet state transition function like $f()$ above, we have:
 
 $$ \dot{x}(t) = f_c(x(t), u(t)) $$
 
-(The $f_c$ subscript denotes "continuous" for clarity).
+(The $f_c$ subscript denotes "continuous" for clarity). Recall that $x$ is the state vector, containing both position and velocity; so this function is calculating the resulting velocity and acceleration from applying a torque input at a given position and velocity. This function should be a known of the system (it's the system dynamics).
 
 The long-term cost is, instead of a sum over discreet time steps, is an integral of the cost function over dt:
 
 $$ \int l_c(x, u) dt $$
 
-$J^*(x)$ is still the optimal cost-to-go at state $x$, and satisfies:
+The Hamilton-Jacobi-Bellman (HJB) equation is used to calculate the optimal control action $u$. It's quite unintuitive how you would use this equation; the short answer is: you find the input $u$ that makes the HJB equation true. As explained more later, this can be solved quite easily for certain types of sytems (that make the right side of the equation quadratic in $u$).
 
-$$ \forall x ~ 0=\min_u [l(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u)]$$
+$$ \forall x ~ 0=\min_u \bigg [\ell(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u) \bigg ]$$
 
-This equation is known as Hamilton-Jacobi-Bellman (HJB) equation. It's quite unintuitive; so, an informal derivation:
+($J^*(x)$ is still the optimal cost-to-go at state $x$)
+
+HJB is quite unintuitive; so, an informal derivation:
 
 $$ x[n+1] \approx x[n] + dt*f_c(x[n], u[n]) $$
 
 (this is simply a discreet approximation of continuous space using a small $dt$).
 
-$$ J^*(x) = \min_u [dt*l(x, u) + J^*(x + dt*f_c(x, u))] $$
+$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x + dt*f_c(x, u)) \bigg ] $$
 
 Using a first-order Taylor Expansion, we can approximate $ J^*(x + dt*f_c(x, u))$ as $J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)$. Plugging this in above:
 
-$$ J^*(x) = \min_u [dt*l(x, u) + J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u)] $$
+$$ J^*(x) = \min_u \bigg [dt*\ell(x, u) + J^*(x) + \frac{\delta J^*}{\delta  x}dt*f_c(x, u) \bigg ] $$
 
 With this step done, we've now separated $J^*$ into $J^*(x)$, which is not dependent on $u$, from the part of $J^*$ that is dependent on $u$. On the right side of the eqution, we can pull $J^*(x)$ out of the $\min_u$ operator, and cancel it from the left side of the equation. We can also pull the $dt$ multiplier out, since this is also independent of $u$, and this divide this term out. We are left with the HJB equation above:
 
-$$ 0 = \min_u [l(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u)] $$
+$$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u) \bigg ] $$
 
 ### Applying HJB on Cart Mass System (Double Integrator)
+
+Now, we will see an example of how to use HJB to validate that a control policy is optimal. Any optimal control policy will satisfy the HJB equation.
+
+Once again, the goal of the Cart Mass System problem is to keep the mass at the origin.
+
+Let's say this is our cost (quadratic in state variables and effort):
+
+$$ \ell(x, u) = q^2 + \dot{q}^2 + u^2 $$
+
+We will try to validate this optimal controller:
+
+$$ u^*(x) = -q - \sqrt{3} \dot{q} $$
+
+With this cost-to-go function:
+
+$$ J(x) = \sqrt{3} q^2 + 2q\dot{q} + \sqrt{3}\dot{q}^2 $$
+
+We will now prove this by plugging this cost-to-go function into HJB and seeing that we get $u^*$ back.
+
+<center><img src="Media/HJB_double_integrator.png" style="width:90%"/></center><br />
+
+This math involves partial derivatives of a scalar function with respect to vectors. Just trust that this is how it works. The derivative of a scalar function wrt vectors creates a row vector. The double integrator has dynamics $f(x, u) = \begin{bmatrix}
+\dot{q} \\
+u 
+\end{bmatrix}$ (recall that $f(x, u) = \dot{x}$ by definition), so $\frac{\delta J}{\delta x} f(x, u)$ is equal to the blob on the right side of the equation.
+
+Now, we need to find $u$ to minimize the equation above (as required by HJB). To do so, we take the gradent of the equation with respect to $u$, set it equal to 0, and we will find $u = -q - \sqrt{3} \dot{q} $, the optimal controller we defined above.
+
+### HJB as an Algorithm
+
+Now, we see how to use HJB to actually solve for the optimal control policy $u$ without knowing the cost-to-go beforehand.
+
+One of the first challenges to resolve is the $\min_u$. In the discreet DP algorithm, we could evaluate over all possible actions and pick the best. In continuous action space, this is not possible.
+
+To overcome this, we need to make some assumptions about the system and cost function. The system must be "control affine", meaing that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
+
+$$ f(x, y) =  f_1(x) + f_2(x)u $$
+
+and, the cost function must be of the form (quadratic with respect to the command (i.e. a quadratic energy cost) plus something having to do with state; the cost function with the HJB cart mass system example above is an example of this):
+
+$$ \ell(x, u) = \ell_1(x) + u^T R u $$
+
+We can now write HJB as:
+
+$$ 0 = \min_u \bigg[\ell_1(x) + u^T Ru + \frac{\delta J}{\delta x}[f_1(x) + f_x(x)u] \bigg] $$
+
+We can use this HJB to solve for the optimal $u^*$; notice how the function on the right side is a quadratic; we can solve for the analytical minimum by taking the gradient and setting to 0:
+
+$$ \frac{\delta}{\delta u} \bigg[\ell_1(x) + u^T Ru + \frac{\delta J}{\delta x}[f_1(x) + f_x(x)u] \bigg] = 2u^T R + \frac{\delta J}{\delta x}f_2(x) = 0 $$
+
+Solving for $u$, we get:
+
+$$ u^* = -\frac{1}{2} R^{-1} f_2^T(x) \frac{\delta J^T}{\delta x} $$
+
+However, if we have limits on $u$ (i.e. torque limits), which would be linear constraints on $u$, then $u^*$ can be easily solved as a Quadratic Program.
+
+Now, we are able to find the optimal $u^*$ for any given cost function and state. In a real robotic system with some loop speed, you essentially solve for $u^*$ every loop, apply it to the robot, measure changes in state, and repeat.
+
+
+#### Brief Aside on Special Cases
+What happens if you cannot satisfy the constraints above, i.e. $\ell(x, u)$ is not quadratic in $u$ and the system is not control affine ($ f(x, y) =  f_1(x) + f_2(x)u $)? Every iteration of the algorith, you would take a positive-definite quadratic approximation in $u$ of the HJB and then solve for $u^*$.
+
+
+<br /><br />
+
+## Linear Quadratic Regulator (LQR)
+
+Linear dynamics, quadratic cost; goal is to stabilize to $x^* = 0$ with minimum cost (at the bottom of the quadratic cost function). LQR works on system dynamics of the form:
+
+$$ \dot{x} = Ax + Bu $$
+
+with quadratic cost ($Q$ and $R$ are symmetric positive definite matrices):
+
+$$ \ell(x, u) = x^TQx + u^TRu $$
+
+and quadratic cost-to-go of the form ($S$ is unknown):
+
+$$ J^*(x) = x^T Sx $$
+ 
+We now plug the above into HJB to find the optimal $u^*$ and optimal $S$:
+
+$$ \forall x, ~ 0 = \min_u \bigg [ x^TQx + u^TRu + \frac{\delta J^*}{\delta x} (Ax + Bu) \bigg ]$$
+
+$$ \frac{\delta J^*}{\delta x} = 2x^T S $$
+
+Take the gradient of the HJB function wrt $u$, as we did above (which will find the analytical minimum of the quadratic function), and you will get:
+
+$$ u^*(x) = -R^{-1} B^T Sx = -Kx$$
+
+which is linear in $x$ (we defined a new variable here $K$ for convenience).
+
+However, we still need to find the optimal $S$. We can plug $u^*$ back into HJB:
+
+$$ 0 = x^T[Q-SBR^{-1}B^TS + 2SA]x $$
+
+This must hold for all $x$, so we can sort of "divide" $x$ out. Then $Q-SBR^{-1}B^TS + 2SA = 0$, and we must solve for $S$. This is complicated; in practice, your numerical tookbox (i.e. drake, matlab) will have a function that will return $S$ and $K$ given $Q,R,A,B$.
+
+LQR works for a variety of systems; even systems without linear dynamics or quadratic cost, you can take linear/quadratic approximations and still get good control.
+
+If, for example,you want to stabilize to a fixed point other than $x=0$, you can also perform a change of variables such that you are stabilizing the new varible to $0$.
+
+### Tuning LQR
+
+$Q$ and $R$ are hyperparameters. Scaling both $Q$ or $R$ together just scales the cost; doesn't affect the optimal controller. The relative scale of $Q$ nd $R$ is what matters, so typically you just set $R$ = 1 and tune $Q$. You are essentially weighing how much you care about "error" vs "effort". It's a good idea to think bout the units of $Q$ and $R$, and then scale them so they are similarly sized when in the same units.
+
+
+## Acrobots, Cart-Poles and Quadrotors
+
+Canonical underactuated systems, and how to control them.
+
+### Acrobot
+2-link planar robot with only an actuator at the elbow:
+<center><img src="Media/acrobot.png" style="width:25%"/></center><br />
+
+The goal of the Acrobot is to achieve the state $x =\begin{bmatrix}
+           \pi \\
+           0 \\
+           0 \\
+           0
+         \end{bmatrix}$
+
+Consider $I_1$ and $I_2$ the Moments of Inertia about the pivots for each link.
+
+Let's first use Euler Lagrange to solve for the 2 equations of motion ($s1$ is shorthand for $\sin(\theta_1)$, and $c_{1+2}$ is shorthand for $\cos(\theta_1 + \theta_2)$, etc.):
+
+<center><img src="Media/acrobot_eom.png" style="width:60%"/></center><br />
+
+where $\tau$ is a Generalized Force applied on the system (the torque from the elbow actuator).
+
+Let's express this in the form of the manipulator equations by combining $q = \begin{bmatrix}
+           q_1 \\
+            q_2
+         \end{bmatrix}$; essentially, each equation in the Euler Lagrange EoMs becomes a row of the manipulator equations (note that $u$ = $\tau$):
+
+$$ M(q) \ddot{q} + C(q, \dot{q})\dot{q} = \tau_g(q) + Bu $$
+
+<center><img src="Media/acrobot_eom_manipulator_equation.png" style="width:50%"/></center><br />
+
+Linearization and LQR will be easier having the EoMs in this single matrix equation.
+
+Our approach for controlling the acrobot will be to first develop a linear controller (i.e. LQR) for the system linearized around the target fixed point/state (which is $x =\begin{bmatrix}
+           \pi \\
+           0 \\
+           0 \\
+           0
+         \end{bmatrix}$). First, then, let's linearize the manipulator equation.
+
+Because our system also has a non-constant $u$, we need to linearize around a fixed point in both $x$ and $u$, so let's denote the fixed point $x^*$ and $u^*$. As we typically do with linearization, let's also define "errors": $\bar{x} = x-x^*$ and $\bar{u} = u-u^*$ (so the linearization is around $\bar{x}$ and $\bar{u}=0$). Using a 1st order Taylor Approximation around the fixed point, we get: 
+
+<center><img src="Media/linearization.png" style="width:70%"/></center><br />
+
+where $f(x,u)$ is the dynamics equation for the given system (i.e. the manipulator equation). If the fixed point we choose is an equilibrium point, then $f(x^*, u^*) = 0$ (velocity and acceleration at equilibrium = 0). Then, our equation is linear in terms of $\bar{x}, \bar{u}$:
+
+$$\dot{\bar{x}} = A_{lin} \bar{x} + B_{lin} \bar{u}$$
+
+where $A_{lin}$ and $B_{lin}$ are constant matrices resulting from evaluating $[\frac{\delta f}{\delta x}]_{x=x^*, u=u^*}$ and $[\frac{\delta f}{\delta u}]_{x=x^*, u=u^*}$ respectively.
+
+If we evaluate $A_{lin}$ and $B_{lin}$ using the manipulator equation for $f(x,u)$, we get the block matrices:
+
+<center><img src="Media/linearization_A_B.png" style="width:40%"/></center><br />
+
+Note that the linearization gives us quite a good approximation; if the linearized system is stable, then the nonlinear system is locally exponeitially stable. If the linearized system is unstable, the nonlinear system is locally unstable.
+
+Now, to optimally control the system, we use LQR. We just define a quadratic cost with which to optimize (where $Q$ and $R$ are positive definite symmetric matrices):
+
+$$ J(x^*) = \int^\infty_0 [x^TQx + u^TRu] dt $$
+
+Then:
+
+$$u(t) = -Kx(t)$$
+
+We call `K = LinearQuadraticRegulator(A, B, Q, R)` passing in $A, B, Q, R$, and get the resulting control $K$ out.
+
+<br /><br />
+
+### Cartpole
+
+<center><img src="Media/Cartpole.png" style="width:32%"/></center><br />
+
+We define $q = \begin{bmatrix}
+           x \\
+           \theta \\
+         \end{bmatrix}$ and try to stabilize around $x = \begin{bmatrix}
+           0 \\
+           \pi \\
+           0 \\
+           0
+         \end{bmatrix}$.
+
+Once again using Euler Lagrange to solve for the 2 equations of motion:
+
+<center><img src="Media/cartpole_eom.png" style="width:45%"/></center><br />
+
+where $f_x$ is the generalized force applied on the system (the horizontal force the cart generates).
+
+Re-expressing this in the form of the manipulator equations:
+
+<center><img src="Media/cartpole_eom_manipulator_equation.png" style="width:55%"/></center><br />
+
+To solve for the optimal controller, we once again linearize the system's dynamics and apply LQR. To linearize, we perform the same first-order Taylor series expansion as above on the manipulator equation given that we have already solved for all the elements of the manipulator equation. Next, we simply define a quadratic cost and plug in matrices $A, B, Q, R$ into the LQR to get the optimal controller back. This procedure is all the same as for the acrobot.
+
+<!-- For the cartpole, it's simple to isolate the accelerations:
+
+<center><img src="Media/cartpole_eom_simple.png" style="width:65%"/></center><br />
+
+For simplicity, let's just say all constants are 1:
+
+<center><img src="Media/cartpole_eom_1.png" style="width:30%"/></center><br /> -->
+
+
+<br /><br />
+
+### Quadrotors
+
+(Technically a bi-rotor in the planar case):
+
+<center><img src="Media/planar_quadrotor.png" style="width:30%"/></center><br />
+
+The equations of motion are extremely simple:
+
+<center><img src="Media/planar_quadrotor_eom.png" style="width:30%"/></center><br />
+
+Same as for the acrobot and cartpole, we can re-express these EoMs as the manipulator equation, linearize it, then apply LQR to control it to a desired state $x^*$ and $u^*$.
+
+
+### Controllability
+
+Controllability: If a system with dynamics $\dot{x} = f(x,u)$ has an input signal $u(t)$ that can move the system from any initial state to any final state in finite time.
+
+For a linear system (or a linear approximation of a nonlinear system), this can be analytically calculated. Assuming the dynamics are of the form:
+
+$$\dot{x} = Ax + Bu$$
+
+The system is controllable if the matrix is full rank:
+
+<center><img src="Media/controllability_matrix.png" style="width:40%"/></center><br />
+
+**Derivation:**
+
+The analytical solution ($x(t)$) to the linear ODE is as follows: 
+
+<center><img src="Media/linear_ode_solution.png" style="width:30%"/></center><br />
+
+As can be seen, we make an assumption here for a stabilizing controller, that $x(t_f) = 0$. You can simplify this solution even further to an equation of this form:
+
+$$x(0) = M*\begin{bmatrix}
+           f_0(u) \\
+           f_1(u) \\
+           \dots \\
+           f_n-1(u)
+         \end{bmatrix}$$ 
+         
+where $M$ is the controllability matrix. Therefore, for every initial condition $x(0)$, there must be a correspoding set of $u$ (and therefore, $f_i(u)$). This is true when $M$ has linearly independent rows (each row of $M$ maps to an element in $x(0)$, and each element of $x(0)$ needs to be independently "actuatable").
+
+The full derivation is here ("A general solution"): https://underactuated.mit.edu/acrobot.html#controllability_matrix
+
+
+### Stabilizability
+
+Stabilizability: If the system has an unconstrained input $u(t)$ that reaches $\lim_{t \rightarrow \infty} x(t) = 0$.
+
+Controllability requires that we arrive at the origin in a finite time, stabilizability allows for asympotitic convergence.
+
+LQR will solve optimal control for any linear system that is stabilizable. Note that both the acrobot and cart-pole are controllable (and therefore also stabilizable).
+
+Also note that an underactuated system can be controllable (i.e. acrobot and cart-pole).
