@@ -125,7 +125,23 @@ Now, it's clear how HJB can solve for $u^*$ given $J^*(x)$; but how do we calcul
 
 ### Solving for $J^*(x)$ using Value Iteration with a Mesh & Interpolation
 
-### Solving for $J^*(x)$ using Value Iteration with a Neural Network (Discreet time, continuous state)
+This is basically discretizing the cost-to-go function as a set/mesh of points, with interpolation between points on the mesh. If you must calculate $\hat{J}^*(x)$ at some $x$ that isn't at a point on the mesh, then you use an interpolated $\hat{J}^*$ value:
+
+$$ \hat{J}^*(x) = \sum_i \beta_i(x) \hat{J}(x_i), ~~~~~~~\sum_i \beta_i(x) = 1$$
+
+This is called "Barycentric Interpolation", and $\beta$ are the Barycentric weights. Barycentric interpolation can also take many forms; the simplest is linear interpolation, where $\beta(x)$ is solved as the distance from $x$ to each $x_i$ (normalized so that all $\beta(x)$ add to $1$.).
+
+To actually perform value iteration, we do value iteration updates until convergence, as we would normally do, but we update all mesh points of $\hat{J}^*$ at the same time ($x_k$ denotes a mesh point): 
+
+$$ J_k = \min_u \bigg[ \ell(x_k, u) + \hat{J^*}(f(x_k, u)) \bigg] $$
+
+Value Iteration with $\hat{J}^*$ approximated using Mesh Interpolation is guaranteed to converge $\hat{J}^*$ to the globally optimal $J^*$; this is because Barycentric Interpolataion is an example of a linear function approximator, which is further explained below. You can see the analogs between the Barycentric Interpolation paramterization of $\hat{J}^*$ and the linear function approximation paramaterization:
+
+<center><img src="Media/barycentric_interp.png" style="width:70%"/></center><br />
+
+$\hat{J}^*(x_i)$ is an analog to $\alpha$ (the vector being updated in each value iteration update), and $\beta(x)$ an analog to $\psi_i(x)$ (some non-linear feature).
+
+### Solving for $J^*(x)$ using Value Iteration with Neural Network Paramaterization (Discreet time, continuous state)
 
 We paramaterize the cost-to-go function using $\alpha$: $\hat{J_\alpha}(x) $. Basically, we make $\hat{J_\alpha}(x) $ a black box NN and use supervised learning to solve for the weights.
 
@@ -135,19 +151,27 @@ $$ J_k^d = \min_u \bigg[ \ell(x_k, u) + \hat{J_\alpha^*}(f(x_k, u)) \bigg] $$
 
 $$ \alpha = \argmin_\alpha \sum_k \bigg( \hat{J_\alpha^*}(x_k) - J_k^d \bigg) $$
 
-The purpose of having two steps instead of combining into one is that the computation of $J_k^d$ will use the prior value of $\alpha$, so the minimization over $\alpha$ step will have $J_k^d$ as a constant. The intuition behind this value iteration update is that we first calculate a desired cost-to-go given the current estimate of $\alpha$, then try to tune $\alpha$ to cahieve this desired value.
+We take a random sample of states $x_k$ and then perform the update using those samples.
 
-(As usual, $x_{k+1} = f(x_k, u)$ is the transition function and $\ell(x_k, u)$ is the loss function).
+The purpose of having two steps instead of combining into one is that the computation of $J_k^d$ will use the prior value of $\alpha$, so the minimization over $\alpha$ step will have $J_k^d$ as a constant. 
+
+The intuition behind this value iteration update is that we first calculate a desired cost-to-go given the current estimate of $\alpha$, taking only into account future time steps; then, we try to tune $\alpha$ to achieve this desired value at the current time step. Note that cost-to-go decreases as time goes on; so comparing $\hat{J_\alpha^*}(x_k)$ to $J_k^d$ is sort of unfair because $J_k^d$ is the cost-to-go at a future time step. This forces $\hat{J_\alpha^*}(x_k)$ to try to minimize.
 
 We can apply this value iteration update repeatedly until convergence.
 
-To compute $\argmin_\alpha$, we typically perform a stochastic gradient descent.
+To actually compute $\argmin_\alpha$, we might use stochastic gradient descent.
 
-This approach works well when $\hat{J}_\alpha^*(x)$ is approximated as a linear function:
+### Linear Function Approximtors
 
-$$ \hat{J}_\alpha^*(x) = \sum_i \alpha_i \phi(x) ~~~~~~~~~\text{vector form: } \hat{J}_\alpha^*(x)=\phi^T(x)\alpha$$
+The above method of paramaterize the cost-to-go function using $\alpha$: $\hat{J_\alpha}(x) $ only works well for certain paramaterizations $\alpha$. One such paramaterization is the "linear function approximation" paramaterization:
 
-where $\phi^T(x)$ is a column vector of nonlinear features.
+$$ \hat{J}_\alpha^*(x) = \sum_i \alpha_i \psi(x) ~~~~~~~~~\text{vector form: } \hat{J}_\alpha^*(x)=\psi^T(x)\alpha$$
+
+where $\psi^T(x)$ is a column vector of nonlinear "features", i.e. polynomials, and $\alpha$ is a vector of scalars. One advantage of paramaterizing $\hat{J}^*$ using linear function approximators is that you can solve for $\alpha$ analytically, given $\hat{J}^*$ ($^+$ = pseudoinverse):
+
+<center><img src="Media/linear_function_approximator.png" style="width:25%"/></center><br />
+
+It's pretty easy to see that this solution for $\alpha$ does satisfy $ \alpha = \argmin_\alpha \sum_k \bigg( \hat{J_\alpha^*}(x_k) - J_k^d \bigg) $; plugging this solution for $\alpha$ into $\hat{J}_\alpha^*(x)=\psi^T(x)\alpha$ yields $\hat{J}_\alpha^*(x) = J^d_k$. Therefore, approximating $J^*$ using any linear function approximator will guarantee $\hat{J}^*$ coverges to $J^*$.
 
 
 ### More Detail on HJB
