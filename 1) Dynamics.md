@@ -58,6 +58,8 @@ Also cause underactuation. i.e. cars can't move sideways $\rightarrow$ doesn't r
 
 ### Background: Phase Portraits
 
+When we are unable to solve for the analytical solution to an ODE (i.e. most 2nd order ODEs), we resort to analyzing behavior using a phase portrait.
+
 Phase portraits plot $\dot{q}$ vs $q$, along with a vector field of vectors $[\dot{q}, \ddot{q}]^T$ and repesent the dynamics of the system. We may call the "state vector" $x = [q, \dot{q}]^T$. Then, the vectors in the vector field are all $\dot{x} = [\dot{q}, \ddot{q}]^T$.
 
 This is a simple sliding cart-mass system where, with no external force $u$, there is no $\ddot{q}$:

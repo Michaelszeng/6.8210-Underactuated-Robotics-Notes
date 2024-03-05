@@ -56,13 +56,13 @@ The long-term cost is, instead of a sum over discreet time steps, is an integral
 
 $$ \int l_c(x, u) dt $$
 
-To solve for the optimal control action $u$ given, we need to do two things; first, we must solve for the optimal cost-to-go function $J^*(x)$ using value iteration,then we use the Hamilton-Jacobi-Bellman (HJB) equation to solve for $u$ using the optimal cost-to-go function:
+To solve for the optimal control action $u$ given, we need to do two things; first, we must solve for the optimal cost-to-go function $J^*(x)$ using value iteration, then we use the Hamilton-Jacobi-Bellman (HJB) equation to solve for $u$ using $J^*(x)$:
 
 $$ \forall x ~ 0=\min_u \bigg [\ell(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u) \bigg ]$$
 
 First, we will show how to solve for $u$, assuming we know $J^*(x)$. This is simply a matter of solving the optimization problem that is the HJB equation (finding $u$ to mininimize the right-hand-side).
 
-In the discreet time/state/action DP algorithm, we could evaluate over all possible $u$ and pick the best. In continuous action space, this is not possible. Either we need to solve for $u$ analytically or use numerical methods (like gradient descent). We will take a look at a special case where we can solve for $u$ analytically: the system must be "control affine", meaing that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
+In the discreet time/state/action DP algorithm, we could evaluate over all possible $u$ and pick the best. In continuous action space, this is not possible. Either we need to solve for $u$ analytically or use numerical methods (like gradient descent). We will take a look at a special case where we can solve for $u$ analytically: the system must be "control affine", meaning that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
 
 $$ f(x, y) =  f_1(x) + f_2(x)u $$
 
@@ -116,12 +116,14 @@ This math involves partial derivatives of a scalar function with respect to vect
 u 
 \end{bmatrix}$ (recall that $f(x, u) = \dot{x}$ by definition), so $\frac{\delta J}{\delta x} f(x, u)$ is equal to the blob on the right side of the equation.
 
-Now, we need to find $u$ to minimize the equation above (as required by HJB). To do so, we take the gradent of the equation with respect to $u$, set it equal to 0, and we will find $u* = -q - \sqrt{3} \dot{q} $, the optimal controller.
+Now, we need to find $u$ to minimize the equation above (as required by HJB). To do so, we take the gradent of the equation with respect to $u$, set it equal to 0, and we will find $u^* = -q - \sqrt{3} \dot{q} $, the optimal controller.
 
 
 ## Solving for $J^*(x)$ using Value Iteration
 
 Now, it's clear how HJB can solve for $u^*$ given $J^*(x)$; but how do we calculate the function $J^*(x)$ in the first place?
+
+Sidenote: It's also possible to use $\hat{J}^*(x)$ itself to compute the optimal policy $u$ (so, no need to apply HJB, although HJB would be faster). For example: store a table of each $u(x)$ during value iteration (however, this won't work well for continuous state space); if you explore all states even after convergence, then $u$ will be optimal for each $x$.
 
 ### Solving for $J^*(x)$ using Value Iteration with a Mesh & Interpolation
 
@@ -135,15 +137,21 @@ To actually perform value iteration, we do value iteration updates until converg
 
 $$ J_k = \min_u \bigg[ \ell(x_k, u) + \hat{J^*}(f(x_k, u)) \bigg] $$
 
-Value Iteration with $\hat{J}^*$ approximated using Mesh Interpolation is guaranteed to converge $\hat{J}^*$ to the globally optimal $J^*$; this is because Barycentric Interpolataion is an example of a linear function approximator, which is further explained below. You can see the analogs between the Barycentric Interpolation paramterization of $\hat{J}^*$ and the linear function approximation paramaterization:
+Value Iteration with $\hat{J}^*$ approximated using Mesh Interpolation is guaranteed to converge $\hat{J}^*$ to the globally optimal $J^*$; this is because Barycentric Interpolatation is an example of a linear function approximator, which is further explained below. You can see the analogs between the Barycentric Interpolation paramterization of $\hat{J}^*$ and the linear function approximation paramaterization:
+
+
 
 <center><img src="Media/barycentric_interp.png" style="width:70%"/></center><br />
+
+
 
 $\hat{J}^*(x_i)$ is an analog to $\alpha$ (the vector being updated in each value iteration update), and $\beta(x)$ an analog to $\psi_i(x)$ (some non-linear feature).
 
 ### Solving for $J^*(x)$ using Value Iteration with Neural Network Paramaterization (Discreet time, continuous state)
 
-We paramaterize the cost-to-go function using $\alpha$: $\hat{J_\alpha}(x) $. Basically, we make $\hat{J_\alpha}(x) $ a black box NN and use supervised learning to solve for the weights.
+AKA ***Neural-fitted Value Iteration***
+
+We paramaterize the cost-to-go function using $\alpha$: $\hat{J_\alpha}(x) $. Basically, we make $\hat{J_\alpha}(x) $ a black box linear NN and use supervised learning to solve for the weights $\alpha$.
 
 Then the value iteration update is (with 2 steps):
 
@@ -159,17 +167,39 @@ The intuition behind this value iteration update is that we first calculate a de
 
 We can apply this value iteration update repeatedly until convergence.
 
-To actually compute $\argmin_\alpha$, we might use stochastic gradient descent.
+To actually compute $\argmin_\alpha$, we might use stochastic gradient descent or the Adam optimizer (any of the classics in deep learning).
 
-### Linear Function Approximtors
+When actually implementing this algorithm using i.e. PyTorch, you would set up a linear NN with $\alpha$ as the weights (no activation function in this case), and set the loss equal to the error between $\hat{J}_\alpha^*(x_k)$ (the output of the NN) and $J^d_k$. You then perform back-prop to update $\alpha$ each iteration (in addition to setting $J^d_k$).
+
+Note: this strategy of sampling $k$ states does not scale well to high dimension; in those cases, RL has some methods that involve long simulation rollouts; so instead of sampling random states, you sample states in the direction you want to go.
+
+
+### Example: Solving for $J^*(x)$ using Value Iteration for LQR
+
+(Assuming you have read the below section on LQR): we know the cost-to-go for an LQR controller is of the form $J^*(x) = x^TSx$ where $S$ is some matrix. Here, $J^*(x)$ is a linear function of $S$, so we can treat $J^*(x)$ as a neural network with the values of $S$ as the weights. Then, we set up a linear NN, compute loss as $\hat{J}^*(x)- J^d$, and update $S$ using an optimizer like Adam.
+
+
+### Linear Function Approximators
 
 The above method of paramaterize the cost-to-go function using $\alpha$: $\hat{J_\alpha}(x) $ only works well for certain paramaterizations $\alpha$. One such paramaterization is the "linear function approximation" paramaterization:
 
-$$ \hat{J}_\alpha^*(x) = \sum_i \alpha_i \psi(x) ~~~~~~~~~\text{vector form: } \hat{J}_\alpha^*(x)=\psi^T(x)\alpha$$
+$$ \hat{J}_\alpha^*(x) = \sum_i^K \alpha_i \psi_i(x) ~~~~~~~~~\text{vector form: } \hat{J}_\alpha^*(x)=\psi^T(x)\alpha$$
 
-where $\psi^T(x)$ is a column vector of nonlinear "features", i.e. polynomials, and $\alpha$ is a vector of scalars. One advantage of paramaterizing $\hat{J}^*$ using linear function approximators is that you can solve for $\alpha$ analytically, given $\hat{J}^*$ ($^+$ = pseudoinverse):
+where each $\psi_i(x)$ is a "nonlinear feature" (i.e. any function, like $\sin(x)$, $x^3$, etc.); $\psi^T$ is a vector of nonlinear features and is shape $1 \times N$, where $N$ is the number of nonlinear features. Then, this matrix:
+
+
+
+<center><img src="Media/linear_function_approximator_matrix.png" style="width:10%"/></center><br />
+
+
+
+is $K \times N$, and $\alpha$ is an $N \times 1$ vector of scalars. One advantage of paramaterizing $\hat{J}^*$ using linear function approximators is that you can solve for $\alpha$ analytically, given $\hat{J}^*$ ($^+$ = pseudoinverse; note that the pseudomatrix of an $N \times M$ matrix is $M \times N$):
+
+
 
 <center><img src="Media/linear_function_approximator.png" style="width:25%"/></center><br />
+
+
 
 It's pretty easy to see that this solution for $\alpha$ does satisfy $ \alpha = \argmin_\alpha \sum_k \bigg( \hat{J_\alpha^*}(x_k) - J_k^d \bigg) $; plugging this solution for $\alpha$ into $\hat{J}_\alpha^*(x)=\psi^T(x)\alpha$ yields $\hat{J}_\alpha^*(x) = J^d_k$. Therefore, approximating $J^*$ using any linear function approximator will guarantee $\hat{J}^*$ coverges to $J^*$.
 
@@ -216,6 +246,8 @@ with quadratic cost ($Q$ and $R$ are symmetric positive definite matrices):
 $$ \ell(x, u) = x^TQx + u^TRu $$
 
 In short, this is the formulation of LQR:
+
+
 
 <center><img src="Media/lqr.png" style="width:60%"/></center><br />
 
