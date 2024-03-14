@@ -90,19 +90,12 @@ and if $x(t)$ is a bounded trajectory, $x(t)$ will converge to the largest "inva
 
 Consider the example of the simple (non-actuated) damped pendulum; we can use the energy of the pendulum as the Lyapunov function. Then, $V(x) \succ 0$ and $\dot{V}(x) \preceq 0$, and $x(t)$ is a bounded trajectory for a pendulum.
 
-Then, LaSalle's states that the pendulum will converge to the largest invariant set; for the damped pendulum, this the set of all the fixed points; once you enter a fixed point ($\theta = k \pi, \dot{\theta}=0$), the pendulum will not leave it. So, the pendulum will converge to either the bottom or top position.
-
-
-### Regions of Attraction
-
-Region of attraction to $x^*$ = largest set $D \subseteq X $ for which $x(0) \in D \implies lim_{t \rightarrow \infty} x(t) = x^*$. Regions of attraction are invariant sets.
-
-Lyapunov Invariant Set and Region of Attraction Theorem:
+Then, LaSalle's states that the pendulum will converge to the largest invariant set where $\dot{V}=0$; for the damped pendulum, this the set of all the fixed points; once you enter a fixed point ($\theta = k \pi, \dot{\theta}=0$), $\dot{V}=0$, and, obviously, the pendulum will not leave it. So, the pendulum will converge to either the bottom or top position.
 
 
 ### Pendulum Example
 
-Recall the dynamics of the pendulum: $ ml^2 \ddot{\theta} + mgl \sin\theta = u$.
+Recall the dynamics of an actuated, undamped pendulum: $ ml^2 \ddot{\theta} + mgl \sin\theta = u$.
 
 The energy of the system is: $E(x) = \frac{1}{2} ml^2 \dot{\theta}^2 - mgl\cos(\theta)$.
 
@@ -118,47 +111,108 @@ In order to get a system that converges to $E^d = mgl$, we need to pick some $u$
 
 We pick $u=-k\dot{\theta}\tilde{E}$ (for some positive constant $k$). Then, $\dot{V}(x)=\tilde{E}*u \dot{\theta} = \tilde{E}*(-k\dot{\theta}\tilde{E})\dot{\theta} = -k\dot{\theta}^2\tilde{E}^2$. Clearly, $\dot{V}(x)$ is decreasing except when $E(x) = E^d$, when it is zero.
 
-Therefore, we validate that this control policy will be successful in getting the system to converge to the standing position.
+Therefore, we validate that this control policy will be successful in getting the system to the "homoclinic orbit": when $E = E^d = mgl$. Once the pendulum is in homoclinic orbit, we can switch to a simpler policy like LQR to stabilize around the upright position specifically (but note that the control policy we picked cannot do this final step).
 
 In this example, we had no systematic way to choose $u$; we simply picked something that would obviously make $\dot{V}(x)$ negative definite. Next, we look at more analytical ways to do this.
 
 
+### Regions of Attraction
+
+Regions of attraction are another useful idea to prove that a system will converge to a specific fixed point/invariant set. They are particularly useful because they allow you to find the exact state-space region from which the system will converge.
+
+Definition: Region of attraction to $x^*$ = largest set $D \subseteq X $ for which $x(0) \in D \implies lim_{t \rightarrow \infty} x(t) = x^*$. Regions of attraction are connected invariant sets. 
+
+Firstly, any sublevel set of a Lyapunov function is an invariant set; this is clear bc $\dot{V}(x) \leq 0$, so once you reach a certain $V(x)$, you cannot reach any state with higher $V(x)$.
+
+**Lyapunov Invariant Set and Region of Attraction Theorem:**
+
+If we can find $V(x) \succ 0$ and a sublevel set of $V(x)$ $G: \{x|V(x) \leq \rho\}$, where, for all $x$ in $G$: $\dot{V}(x) \preceq 0$, then $G$ is an invariant set. By LaSalle, $x$ will converge to the largest invariant subset of $G$ where $\dot{V} = 0$.
+
+Example: consider this 1D system, $\dot{x} = -x + x^3$:
+
+<center><img src="Media/1D_system.png" style="width:35%"/></center><br />
+
+Consider the Lyapunov function $V(x) = \frac{1}{2}x^2$. Firstly, observe that we have sublevel sets $G$ at any $|x| < k$. Also, $\dot{V}(x) = -x^2 + x^4$, which is negative for $|x| < 1$. This satisfies the conditions for $|x| < 1$ being a region of attraction. This means, for any $-1 < x(0) < 1$, $x$ will converge to the origin, where $V(0) = 0$.
+
+
+### Lyapunov Functions with Uncertainty
+
+Imagine you want to prove stability of a system with an uncertain parameter $\alpha_{min} \leq \alpha \leq \alpha_{max}$: $\dot{x} = f_\alpha(x)$. Then we must find a Lyapunov function $V(x)$ where $\dot{V}(x) \leq 0$ for all possible $\alpha$.
+
+Example: consider the same system above with uncertainty: $\dot{x} = -x + \alpha x^3, ~~~ \frac{3}{4} < \alpha < \frac{3}{2}$
+
+<center><img src="Media/region_of_attraction_uncertainty.png" style="width:35%"/></center><br />
+
+As can be seen, the various $\alpha$ change the dynamics slightly, with the blue region representing the smallest region of attraction.
+
+To solve this region of attraction analytically: $\dot{V} = -x^2 +\alpha x^4$ which is negative for $x^2 > \alpha x^4$, or $|x| < \frac{1}{\sqrt{\alpha_{max}}}$.
+
+With other types of uncertainty, the fixed point of the system could shift; the goal in these cases would still be to find the region of attraction, to guarantee that the system will at least reach the region (and it's hard to say anything about the exact point of convergence).
+
+### Barrier Functions
+
+For continuously-differential dynamical system, if you can find a function $B(x)$ where $\forall x, \dot{B}(x) \leq 0$, then the system will never reach states with $B(x(t)) >B(x(0))$. This is useful if we can ensure "failure" regions have higher $B$ values than $x(0)$. 
+
+<br />
+<br />
+
 ## Lyapunov as an Algorithm
 
-### Pendulum Example
+The general idea is this:
 
 Inputs: 
- - pendulum dynamics
- - parameterize family of polynomial/trigonometric functions for the Lyapunov function
+ - system dynamics.
+ - parameterized family of polynomial/trigonometric functions for the Lyapunov function (technically, you pass in a vector of "nonlinear basis functions" and a vector of decision variables).
 
 Output: Coefficients for the polynomial + certificate of stability $\forall x$.
 
-Example poly/trig function family: $V = (a - bc_0 + cs_0\dot{\theta}_0 + ds_0^2 + ec_0^2 + f\dot{\theta}^2_0)$
+Example poly/trig function family for the pendulum: $V = (a - bc_0 + cs_0\dot{\theta}_0 + ds_0^2 + ec_0^2 + f\dot{\theta}^2_0)$
 
-### Computing Lyapunov Functions using Linear Programming
+You formulate an optimization problem to solve for the the coefficients of the nonlinear basis functions.
 
-$\dot{x} = f(x)$
+### Computing Lyapunov Functions using Linear Programming and Sampling
 
-$V(x) = \sum_{j=0}^J \alpha_j \phi_j(x) = \alpha^T \phi(x)$
+With system dynamics: $\dot{x} = f(x)$
+
+We parameterize the Lyapunov function like so:
+
+$$V(x) = \sum_{j=0}^J \alpha_j \phi_j(x) = \alpha^T \phi(x)$$
 
 where each $\phi_j(x)$ is some nonlinear basis function (of which there are a total of $J$). We would typically manually select the basis functions based on prior knowledge about the dynamics of the system (i.e. a single pendulum might have $1$, $\theta$, $\cos \theta$, $\sin \theta$, $\cos^2 \theta$, $\theta^2$ as its basis functions).
 
-
-Sample states $x_i$. Make Lyapunov function; pick $\alpha$ to satisfy all of these samples:
+We sample a bunch of states $x_i$. Make Lyapunov function; pick $\alpha$ to satisfy all of these constraints:
 
 $$ \forall x_i ~~~~V(0) = 0, ~~~~V(x_i) > \epsilon x_i^Tx_i, ~~~~\dot{V}(0) = 0, ~~~~\dot{V}(x_i) = \frac{\delta V}{\delta x} \bigg|_{x=x_i} f(x_i)< -\epsilon x_i^Tx_i$$
 
 Basically, we're adding constraints to the program that $V(0)$ and $\dot{V}(0)$ are $0$, $V(x)$ is positive definite and radially unbounded, and the derivative of $V(x)$ is negtive definite/strictly decreasing (to guarantee asymptotic stability).
 
-Plugging in our parameterization of $V(x)$:
+Plugging in our parameterization of $V(x)$, we get linear constraints in terms of $\alpha$ (the nonlinear terms will be evaluated at each $x_i$ and will become constants):
 
 $$ V(0) = 0, ~~~~\alpha^T \phi(x_i) > \epsilon x_i^Tx_i, ~~~~\dot{V}(0) = 0, ~~~~\alpha^T \frac{\delta \phi}{\delta x} f(x_i) < -\epsilon x_i^Tx_i$$
-
-We get linear constraints in terms of $\alpha$.
 
 With just these linear constriant and no objective, an LP solder could return any feasible $\alpha$, so to ensure a more reasonable answer, we add the linear objective: $ min_\alpha | \dot{V}(x_i)+1|$ (try to make gradient of $V(x)$ 1).
 
 This probably works (assuming enough samples $x_i$), but since we only validate the Lyapunov function constraints on finite # of samples $x_i$, no certificate of stability.
+
+
+### Computing Lyapunov Functions for Linear Systems
+
+If our system satisfies $\dot{x} = Ax$ (it's a linear system), we will need to find a Quadratic Lyapnuov function of the form:
+
+$$V(x) = x^TPx,~~~ P = P^T \succ 0$$
+
+$$\dot{V}(x)  = \frac{\delta V}{\delta x} f(x) = 2x^TPAx= x^TPAx + x^TA^TPx \prec 0$$
+
+to guarantee global exponential stability.
+
+(Note that $V(x)$ does satisfy radial unboundedness bc $P \succ 0$. Also, note that $x^TPAx = x^TA^TPx$ because they are both scalars, and $(x^TPAx)^T = x^TA^TPx$.)
+
+To satisfy the $\dot{V}(x)\prec 0$, we just need (since the $x^Tx \geq 0$):
+
+$$PA+A^TP \prec 0$$
+
+
+
 
 
 
