@@ -197,13 +197,15 @@ This probably works (assuming enough samples $x_i$), but since we only validate 
 
 ### Computing Lyapunov Functions for Linear Systems
 
-If our system satisfies $\dot{x} = Ax$ (it's a linear system), we will need to find a Quadratic Lyapnuov function of the form:
+If our system satisfies $\dot{x} = Ax$ (it's a linear system), we can solve a Lyapunov equation analytically and quite easily.
+
+For linear systems, valid Lyapnuov functions only exist of the (quadratic) form:
 
 $$V(x) = x^TPx,~~~ P = P^T \succ 0$$
 
 $$\dot{V}(x)  = \frac{\delta V}{\delta x} f(x) = 2x^TPAx= x^TPAx + x^TA^TPx \prec 0$$
 
-to guarantee global exponential stability.
+If we find a valid lyapunov function, we guarantee global exponential stability (exponential because $\dot{V}(x) = -\alpha V(x)$).
 
 (Note that $V(x)$ does satisfy radial unboundedness bc $P \succ 0$. Also, note that $x^TPAx = x^TA^TPx$ because they are both scalars, and $(x^TPAx)^T = x^TA^TPx$.)
 
@@ -211,14 +213,93 @@ To satisfy the $\dot{V}(x)\prec 0$, we just need (since the $x^Tx \geq 0$):
 
 $$PA+A^TP \prec 0$$
 
+This can be formulated as an SDP with decision variable $P$ and constraints (note that you can easily express a negative semidefinite constraint as a PSD constraint by multiplying by $-1$ and flipping the inequality): 
 
+$$ P \succeq 0, ~~~PA + A^TP \preceq 0 $$ 
+
+**Sidenote**: for linear systems, it's obvious that SDP is a bit overkill; instead, if $A$ is stable (all its eigenvalues have negative real parts $\rightarrow$ system's response decays to zero at $t=\infty$), then we can just solve for $P \succeq 0$ for any $Q = Q^T \succ 0$: $ PA + A^T P = -Q$
+
+This method of solving the Lyapunov function of a linear system can also be used to propose Lyapunov functions for nonlinear systems by performing a linearization, and often works for proving local stability (and can be supplemented with region of attraction analysis).
+
+
+#### Example: Lyapunov analysis for linear system with uncertainty
+
+Suppose you have a linear system $\dot{x} = Ax$ with $A$ unknown, but bounded. Then we define some $A_i$ that represent the vertices of the convex set bounding the set of possible $A$.
+
+Then, the solve the SDP for $P$ (yielding the Lyapunov function for this uncertain system):
+
+$$ P \succeq 0, ~~~\forall i, P A_i + A_i^T P \preceq 0$$
+
+Note that in this case with multiple $A_i$, it's possible that $P$ is unsolvable even if all the $A_i$ are stable. This is simply because the quadratic form of $V(x)$ is not expressive enough.
+
+
+### Computing Lyapunov Functions for Global Stability for Polynomial Systems using SOS
+
+Now, we show how to solve Lyapunov functions for systems with polynomial dynamics.
+
+We parameterize our Lyapunov function like so (where $\alpha \geq 0$): 
+
+$$V_\alpha(x) = \alpha_0 + \alpha_1 x_1 + \alpha_2 x_2 + \alpha_3 x_1x_2 + \alpha_4 x_1^2 ...$$
+
+Our first goal will be to re-express this as a Sum of Squares (SOS). This means, given $\phi(x)$, a vector of hand-selected nonlinear basis functions (i.e. $\begin{bmatrix}
+1 \\
+x \\
+y \\
+xy \\
+x^2 \\
+...
+\end{bmatrix}$), finding some $P$ satisfying:
+
+$$ V_\alpha(x) = \alpha_0 + \alpha_1 x_1 + \alpha_2 x_2 + \alpha_3 x_1x_2 + \alpha_4 x_1^2 ... = \phi^T(x) P \phi(x), ~~~P \succeq 0$$
+
+$$ -\dot{V}_\alpha(x) = - \frac{\delta V_\alpha}{\delta x} f(x) = \phi^T(x) Q \phi(x)  ~~~Q \succeq 0$$
+
+Note that $\phi(x)$ only needs to contain monomials up to $\frac{1}{2}$ the degree of the $V_\alpha(x)$.
+
+If we can solve this optimization for both $\alpha$, $P$, and $Q$, then we have a valid Lyapunov equation. The key reason this works for polynomial dynamics is that, firstly, $V_\alpha(x)$ is still positive semidefinite; and, secondly, if $f(x)$ is polynomial, $\frac{\delta V_\alpha}{\delta x} f(x)$ is also a polynomial, so it's still possible to express this as a SOS, ensuring $\dot{V}_\alpha(x)$ is negative semidefinite.
+
+The optimization itself should be solved using an SDP; $P \succeq 0$ and $Q \succeq 0$ are clearly PSD constraints, and the "SOS" equalities $\alpha_0 + \alpha_1 x_1 + \alpha_2 x_2 + ... = \phi^T(x) P \phi(x)$ are actually just linear equality constraints.
+
+In practice, you can use an "SOS" optimization solver, which will take "SOS" constraints and automatically determine the appropriate basis functions $\phi(x)$, and solve $P$ and $Q$ behind the scenes (they are not actually needed for the final Lyapunov function $V(x)$). In this case, you would express the optimization like so:
+
+$$ \text{find } \alpha: ~~~~~~~~~V_\alpha(x) \text{ is SOS},~~~V_\alpha(0) = 0, ~~~P \succeq 0$$
+$$ ~~~~~~~~~~~-\dot{V}_\alpha(x) = - \frac{\delta V_\alpha}{\delta x} f(x) \text { is SOS} $$
+
+A similar formulation works for not just polynomials, but $\sin$ and $\cos$ too. You just need to account for trigonometric identities with the linear constraints that match the polynomial terms to basis function terms.
+
+Note however, that it's not always possible to solve for $V_\alpha(x)$ given polynomial dynamics, though these cases are rare and generally engineered.
+
+
+<!-- The set of PSD matrices between (i.e. interpolated between) two PSD matrices is a convex set (all matrices remain PSD) $\rightarrow$ searching this space is a convex optimization. -->
+
+
+#### Example: Searching for a Lyapunov function via SOS
+
+Consider a system with nonlinear dynamics:
+
+$$ \dot{x}_0 = -x_0 - 2x_1^2 ~~~~~~~~~~~~~$$
+$$ \dot{x}_1 = -x_1 - x_0x_1 - 2x_1^3 $$
+
+Let's parameterize the Lyapunov function:
+
+$$V(x) = c_0 + c_1x_0 + c_2x_1 + c_3x_0^2 + c_4x_0x_1 + c_5x_1^2$$
+
+Then we set the constraints of our optimization (where $c$ are the decision variables): 
+
+$$ V(x) \text{ is SOS}, ~~~ -\dot{V}(x) \text{ is SOS} $$
+
+We also add the constraint $V(0) = 0$, and $V([1,0])= 1$ to ensure all the $c$ remain a reasonable scale.
+
+Then, solving this optimization, we come out with correct values of $c$ for a valid Lyapunov function: $V(x) = x_0^2+ 2x_1^2$.
 
 
 
 
 ### Aside: Optimization
 
- - Linear Program (LP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$)
- - Quadratic Program (QP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), linear constraints ($Ax \leq b$)
+ - Linear Program (LP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$).
+ - Quadratic Program (QP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), linear constraints ($Ax \leq b$).
  - 2nd Order Cone Program (SOCP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), conical constraints ($Ax \leq b$) ?????
- - Semi-deifinite Program (SDP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$) + P.S.D matrix constraints ?????
+ - Semi-deifinite Program (SDP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$) + P.S.D matrix constraints (i.e. contraining a matrix to be PSD).
+ - Sum of Squares (SOS): mroe of a "frontend" for SDP; allows you to pass in SOS constrants ("$p_\alpha(x)$ is SOS" where $p_\alpha(x)$ is a polynomial w/coefficients $\alpha$).
+   - will automatically figure out the right basis functions for $\phi^T(x) P \phi(x)$ and solve for $\alpha$ and $P$ using SDP.
