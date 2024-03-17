@@ -45,9 +45,9 @@ for some $\alpha>0$. Also, the same, but with a requirement on the rate that $V(
 Stability in the sense of Lyapunov is an inherently local notion (with the epsilon/delta balls), but asymptotic and exponential stability can apply globally.
 
 Notation note: 
- - $g(x) \succ 0$ = positive definite function ($g(x) > 0$, $g(0) = 0$)
- - $g(x) \prec 0$ = negative definite function ($g(x) < 0$, $g(0) = 0$)
- - $g(x) \succeq 0$ = positive semi-definite function ($g(x) \geq 0$, $g(0) = 0$)
+ - $g(x) \succ 0$ = positive definite function ($g(x) > 0$, $g(\text{fixed points}) = 0$)
+ - $g(x) \prec 0$ = negative definite function ($g(x) < 0$, $g(\text{fixed points}) = 0$)
+ - $g(x) \succeq 0$ = positive semi-definite function ($g(x) \geq 0$, $g(\text{fixed points}) = 0$)
 
 #### Global Asymptotic Stability
 
@@ -80,7 +80,9 @@ If:
 $$ V(x) \succ 0 ~~~\text{and}~~~ \dot{V}(x) \preceq 0$$
 $$ V(x) \rightarrow \infty ~~\text{whenever}~~ ||x|| \rightarrow \infty$$
 
-Then $x$ will converge to the largest "invariant set" where $\dot{V}(x) = 0$. An "invariant set" is the set of $x$ where, once the system enters the set, it never leaves. Basically, if $\dot{V}(x)$ is only negative semidefinite instead of negative definite, LaSalle's states that the system will converge to anywhere in the largest invariant set, instead of just where $V(x)=0$.
+Then $x$ will converge to the largest "invariant set" where $\dot{V}(x) = 0$. An "invariant set" is the set of $x$ where, once the system enters the set, it never leaves. The largest invariant set is simply the union of all invariant sets. Basically, if $\dot{V}(x)$ is only negative semidefinite instead of negative definite, LaSalle's states that the system will converge to anywhere in the largest invariant set, instead of just where $V(x)=0$.
+
+Note: $\dot{V}(x) \preceq 0$ means $\dot{V}(x) \leq 0$ and $\dot{V}(x) = 0$ within the invariant set of convergence.
 
 ALTERNATE FORMULATION: If:
 
@@ -290,8 +292,45 @@ $$ V(x) \text{ is SOS}, ~~~ -\dot{V}(x) \text{ is SOS} $$
 
 We also add the constraint $V(0) = 0$, and $V([1,0])= 1$ to ensure all the $c$ remain a reasonable scale.
 
-Then, solving this optimization, we come out with correct values of $c$ for a valid Lyapunov function: $V(x) = x_0^2+ 2x_1^2$.
+Then, we plug this optimization into our solver, we come out with correct values of $c$ for a valid Lyapunov function: $V(x) = x_0^2+ 2x_1^2$.
 
+
+
+### S-Procedure: Region of Attraction Estimation for Polynomial Systems
+
+The SOS optimization method above for solving a Lyapunov equation for global stability to a fixed point is often not possible--most systems are not globally stable. A more practical approach is to find the region of attraction to that fixed point (and we can evaluate if this is large enough for our purposes).
+
+We can treat SOS optimization like an oracle--it takes questions of the form "is $p(x) \geq 0 ~\forall x$?" Then, to check a region of attraction's stability, we need to re-express $p(x)$ so that it is trivially $\geq 0$ outside of the region, and non-trivial inside the region.
+
+If we define the region like so: $\{ x | g(x) \leq 0 \}$ where $g(x)$ are polynomials, then the goal is to solve this optimization for $\alpha$:
+
+$$ p(x) + \lambda_\alpha^T(x)g(x) \text{ is SOS}, ~~~\lambda_\alpha(x) \text{ is SOS}$$
+
+where $\lambda_\alpha(x)$ is parameterized by some polynomial of $x$: $\lambda_\alpha(x) = \alpha_0 + \alpha_1 x + \alpha_2 x ...$
+
+The idea is that, inside the region, $g(x) \leq 0$ (and ideally is close to $0$), and $\lambda_\alpha(x)$ must be positive, so $p(x)$ is relatively unaffected (and at least wont be deemed $\geq 0$ when it's not). Outside the region, $g(x) > 0$, so p(x) gets a positive number added to it, trivializing the requirement that $p(x) \geq 0$.
+
+We use this shorthand to demonstrate that certification by S-procedure: $g(x)
+ \leq 0 \implies p(x) \geq 0$ (aka, if we're inside the region, then $p(x) \geq 0$).
+
+If, instead, our region of attraction is defined as $\{x | g(x) = 0\}$, then we can simplify the optimization to this (searching for $\alpha$):
+
+$$ p(x) + \lambda_\alpha^T(x)g(x) \text{ is SOS}$$
+
+$\lambda_\alpha(x)$ contributes nothing inside the region of attraction ...??
+
+
+### Applying SOS Region of Attraction Estimation to Lyapunov
+
+To validate a Lyapunov function within a region of attraction:
+
+Let's define the region of attraction using sublevel sets of our Lyapunov function: $V(x) \leq \rho$ (sublevel sets of the Lyapunov function are invariant sets). Then our Lyapunov function must satisfy $V(x) \succ 0$ and $\dot{V}(x) \prec 0 ~~~\forall x \in \{x | V(x) \leq \rho\}$.
+
+Applying the same method as above, we need to solve for $\alpha$:
+
+$$ -\dot{V}(x) = \lambda_\alpha(x)(V(x) - \rho) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
+
+This is limited; it requires a Lyapunov candidate a $\rho$ and simply produces a certificate. If we want to at least leave $\rho$ an unknown (i.e. to solve for the largest region of attraction), we cannot simply make $\rho$ a decision variable; this will introduce bilinearity between deision variables, breaking convexity of the optimization.
 
 
 
@@ -299,7 +338,7 @@ Then, solving this optimization, we come out with correct values of $c$ for a va
 
  - Linear Program (LP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$).
  - Quadratic Program (QP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), linear constraints ($Ax \leq b$).
- - 2nd Order Cone Program (SOCP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), conical constraints ($Ax \leq b$) ?????
+ - 2nd Order Cone Program (SOCP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), conical constraints (?)
  - Semi-deifinite Program (SDP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$) + P.S.D matrix constraints (i.e. contraining a matrix to be PSD).
- - Sum of Squares (SOS): mroe of a "frontend" for SDP; allows you to pass in SOS constrants ("$p_\alpha(x)$ is SOS" where $p_\alpha(x)$ is a polynomial w/coefficients $\alpha$).
-   - will automatically figure out the right basis functions for $\phi^T(x) P \phi(x)$ and solve for $\alpha$ and $P$ using SDP.
+ - Sum of Squares (SOS): more of a "frontend" for SDP; allows you to pass in SOS constrants ("$p_\alpha(x)$ is SOS" where $p_\alpha(x)$ is a polynomial w/coefficients $\alpha$).
+   - will automatically figure out the right nonlinear basis functions for $\phi^T(x) P \phi(x)$ and solve for $\alpha$ and $P$ using SDP.

@@ -124,7 +124,7 @@ In certain cases, your system might have a parameter $w$, and varying $w$ varies
 
 Also, note that, if $u$ was a non-zero constant (imagine a constant torque shifting the equilibrium of the pendulum), you effectively shift the entire phase plot up or down (also shifting the fixed points left or right--the fixed points always are on the x-axis).
 
-### Underdamped Case
+### Undamped Case
 
 Now, $b=0$. $ ml^2\ddot{\theta} + mgl\sin\theta = u_0 $; there is no first order term.
 
