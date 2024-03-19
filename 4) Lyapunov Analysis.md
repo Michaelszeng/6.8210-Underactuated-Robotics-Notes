@@ -274,6 +274,10 @@ Note however, that it's not always possible to solve for $V_\alpha(x)$ given pol
 
 <!-- The set of PSD matrices between (i.e. interpolated between) two PSD matrices is a convex set (all matrices remain PSD) $\rightarrow$ searching this space is a convex optimization. -->
 
+#### Drawback of SOS
+
+Does not scale well with dimension; higher dimension --> exponentially large monomial basis --> exponentially many decision variables.
+
 
 #### Example: Searching for a Lyapunov function via SOS
 
@@ -320,7 +324,7 @@ $$ p(x) + \lambda_\alpha^T(x)g(x) \text{ is SOS}$$
 $\lambda_\alpha(x)$ contributes nothing inside the region of attraction ...??
 
 
-### Applying SOS Region of Attraction Estimation to Lyapunov
+### Applying SOS Region of Attraction Estimation to Lyapunov (for Polynomial Systems)
 
 To validate a Lyapunov function within a region of attraction:
 
@@ -328,17 +332,69 @@ Let's define the region of attraction using sublevel sets of our Lyapunov functi
 
 Applying the same method as above, we need to solve for $\alpha$:
 
-$$ -\dot{V}(x) = \lambda_\alpha(x)(V(x) - \rho) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
+$$ -\dot{V}(x) = \lambda_\alpha(x)(\rho - V(x)) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
 
-This is limited; it requires a Lyapunov candidate a $\rho$ and simply produces a certificate. If we want to at least leave $\rho$ an unknown (i.e. to solve for the largest region of attraction), we cannot simply make $\rho$ a decision variable; this will introduce bilinearity between deision variables, breaking convexity of the optimization.
+This is limited; it requires a Lyapunov candidate $\rho$ and simply produces a certificate (however, if you linearize the system, you could easily find a candidate Lyapunov using SDP as shown above, so this method isn't entirely useless). If we want to at least leave $\rho$ an unknown (i.e. to solve for the largest region of attraction), we cannot simply make $\rho$ a decision variable; this will introduce bilinearity between deision variables, breaking convexity of the optimization. It is, however, easy to simply run this optimization multiple times with different $\rho$ and perform a linear search for the best $\rho$
 
 
+### SOS Region of Attraction Estimation - Another (equality-constrained) Formulation
 
-### Aside: Optimization
+Single convex optimization for both $\lambda(x), \rho$:
 
- - Linear Program (LP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$).
- - Quadratic Program (QP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), linear constraints ($Ax \leq b$).
- - 2nd Order Cone Program (SOCP): quadratic cost ($\frac{1}{2} x^TQx + c^Tx$), conical constraints (?)
- - Semi-deifinite Program (SDP): linear cost ($c^Tx$), linear constraints ($Ax \leq b$) + P.S.D matrix constraints (i.e. contraining a matrix to be PSD).
- - Sum of Squares (SOS): more of a "frontend" for SDP; allows you to pass in SOS constrants ("$p_\alpha(x)$ is SOS" where $p_\alpha(x)$ is a polynomial w/coefficients $\alpha$).
-   - will automatically figure out the right nonlinear basis functions for $\phi^T(x) P \phi(x)$ and solve for $\alpha$ and $P$ using SDP.
+<center><img src="Media/roa_opt.png" style="width:45%"/></center><br />
+
+where $d$ is a fixed positive integer.
+
+Rough intuitive explanation: whenever $\dot{V}(x) =0$, either $x=0$ or $V(x) \geq \rho$. Because $V(x)$ and $\dot{V}(x)$ are smooth/continuous functions, we know that all $x$ between $x=0$ and $\dot{V}(x) =0$ (which is the region with $V(x) < \rho$) uniformly have either $\dot{V}(x) < 0$ or $\dot{V}(x) > 0$ (in the latter case, we can flip $V$ to get to $\dot{V}(x) < 0$, certifying the Lyapunov function).
+
+This formulation is better because it eliminates the constriant on $\lambda(x)$ being SOS, and equality-constrained optimizations are generally easier than inequality-constrained. Also, you solve $\rho$ in one shot.
+
+Note: slight variation (that performs worse) of this formulation + better explanation here: https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/09-Lyapunov-Analysis-Duplicate-ff419dae-7075-4fda-81b6-c34b9f2ceae3/notebook/efbe75f564bf45e6b2e9ee8fcedc3252#c3fb69b5e9024445aa41fad0d7c0efe0
+
+
+### Solving for Lyapunov Function and Region of Attraction using SOS
+
+First, add simple constraints for a valid Lyapunov function:
+
+$$ V(0) = 0, ~~~V(x)- \epsilon x^Tx \text{ is SOS} $$
+
+(the $x^Tx$ term just ensures $V(x)$ is strictly positive definite).
+
+We need to optimize a few things here--the parameters of $V(x)$, and $\lambda$ and $\rho$ to certify stability in a RoA. There is no way to make this a single convex optimization--instead we will solve using alternating convex optimizations between $V(x)$ and $\lambda, \rho$:
+
+1. Fix $V(x)$, solve for $\lambda$ and $\rho$:
+
+<center><img src="Media/roa_opt.png" style="width:45%"/></center><br />
+
+(identical to the optimization for certifying a RoA shown above).
+
+2. Update $V(x)$ to $V(x)/\rho$. 
+
+2. Fix $\lambda(x)$ and solve for $V(x) = x^TPx$ (for the linearized dynamics case):
+
+<center><img src="Media/lyapunov_and_roa_opt.png" style="width:45%"/></center><br />
+
+
+### Lyapunov for Control Design for Polyomial Systems
+
+Parameterize controller as $u =K(x)$ where $K(x)$ is a polynomial vector.
+
+Applying Lyapunov conditions for global stability with control-affine dynamics:
+
+$$ \dot{V}(x) = \frac{\delta V}{\delta x} [f_1(x) + f_2(x) K(x)] $$
+
+We see that solving the optimization for the parameters of both $V(x)$ and $K(x)$ results in bilinearity $\rightarrow$ non-convexity. To overcome this issue, we can do an "alternating" optimization; we first fix $V$, optimize $K$, then fix $K$ and optimize $V$, and so on.
+
+This requires a feasible initial guess for $V$ or $K$; one way we can do this is to linearize the system around the fixed point and use LQR to solve for a control policy for an initial guess for $K$.
+
+If we do not seek to solve for global stability, and instead, for a region of attraction, then we must alternate between 3 optimizations: for $V$, for $K$, and for $\lambda$ and $\rho$.
+
+Although this alternating convex optimization is a non-convex joint operation, it staisfies recursive fasibility (once we have found a feasible solution, we will not lose it) and monotonic improvement (on each objective).
+
+The expression of the nonconvex optimization for $V$, $K$, $\lambda$, and $\rho$:
+
+<center><img src="Media/certified_control_design_lyapunov.png" style="width:55%"/></center><br />
+
+The alternating convex optimization version:
+
+<center><img src="Media/certified_control_design_lyapunov_alternations.png" style="width:60%"/></center><br />

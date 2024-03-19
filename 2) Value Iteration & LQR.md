@@ -72,7 +72,7 @@ $$ \ell(x, u) = \ell_1(x) + u^T R u $$
 
 We can now write HJB as:
 
-$$ 0 = \min_u \bigg[\ell_1(x) + u^T Ru + \frac{\delta J}{\delta x} \bigg|_x [f_1(x) + f_x(x)u] \bigg] $$
+$$ 0 = \min_u \bigg[\ell_1(x) + u^T Ru + \frac{\delta J}{\delta x} \bigg|_x [f_1(x) + f_2(x)u] \bigg] $$
 
 We can use this HJB to solve for the optimal $u^*$; notice how the function on the right side is a quadratic; we can solve for the analytical minimum by taking the gradient and setting to 0:
 
