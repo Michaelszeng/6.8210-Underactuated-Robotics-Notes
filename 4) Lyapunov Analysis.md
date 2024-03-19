@@ -317,11 +317,11 @@ The idea is that, inside the region, $g(x) \leq 0$ (and ideally is close to $0$)
 We use this shorthand to demonstrate that certification by S-procedure: $g(x)
  \leq 0 \implies p(x) \geq 0$ (aka, if we're inside the region, then $p(x) \geq 0$).
 
-If, instead, our region of attraction is defined as $\{x | g(x) = 0\}$, then we can simplify the optimization to this (searching for $\alpha$):
+<!-- If, instead, our region of attraction is defined as $\{x | g(x) = 0\}$, then we can simplify the optimization to this (searching for $\alpha$):
 
 $$ p(x) + \lambda_\alpha^T(x)g(x) \text{ is SOS}$$
 
-$\lambda_\alpha(x)$ contributes nothing inside the region of attraction ...??
+$\lambda_\alpha(x)$ contributes nothing inside the region of attraction ...?? -->
 
 
 ### Applying SOS Region of Attraction Estimation to Lyapunov (for Polynomial Systems)
@@ -356,7 +356,7 @@ Note: slight variation (that performs worse) of this formulation + better explan
 
 First, add simple constraints for a valid Lyapunov function:
 
-$$ V(0) = 0, ~~~V(x)- \epsilon x^Tx \text{ is SOS} $$
+$$ V(0) = 0, ~~~V(x)= \epsilon x^Tx \text{ is SOS} $$
 
 (the $x^Tx$ term just ensures $V(x)$ is strictly positive definite).
 

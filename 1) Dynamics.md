@@ -29,7 +29,7 @@ Sidenote 2: $B$ must be dimension $dim(q) \times dim(u)$, and the only way for i
 If, for example, the manipulator has a free-spinning joint, then $B$ would lose a dimension, and then $\ddot{q}$ would be limited within the subspace that $B$ projects to.
 
 
-### Feedback Equivalence
+### Feedback Equivalence/Cancellation
 
 For full-actuated systems, control is easy. For any desired $\ddot{q}^d$:
 
@@ -40,6 +40,13 @@ $u$ is calculated analytically.
 This is also called a "double integrator" controller. Disadvantage: requires may actuators + energy.
 
 Also, feedback equivalence may only be possible sometimes. $B^{-1}$ could get large $\rightarrow$ demand unreasonably high torques.
+
+
+#### Feedback Linearization
+
+Subset of Feedback Equivalence--specifically when Feedback Equivalence linearizes the dynamics of the system (this is not always possible, especially for underactuated systems when multiple DoF are coupled). If you solve for the feedback equivalence controller $u$, then plug $u$ into the dynamics, the dynamics should be linear if feedback linearization is possible.
+
+For underactuated systems, if its only possible to linearize the dynamics in a few (but not all) dimensions, this is called *partial* feedback linearization.
 
 
 ### Input and State Constraints
