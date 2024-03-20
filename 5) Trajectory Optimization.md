@@ -122,11 +122,17 @@ There are also many numerical integrators that can perform this operation with v
 
 ### Direct Collocation
 
-In general, the formulation is very similar to direc transcription, except the input trajectory and state trajectory are parameterized as piecewise polynomial functions (specifically as first-order polynomials,and cubic polynomials, respectively).
+In general, the formulation is very similar to direct transcription, except the input trajectory and state trajectory are parameterized as piecewise polynomial functions (specifically as first-order polynomials,and cubic polynomials, respectively).
 
-The decision variables for the optimization are simply sample points in $u(t)$ and $x(t)$; for $u(t)$, two samples fully define the trajectory. For $x(t)$, one sample point with corresponding input trajectory $u(t)$ fully defines the $x(t)$ trajectory.
+The decision variables for the optimization are simply sample points in $u(t)$ and $x(t)$; for $u(t)$ (a first-order, linear polynomial), two samples fully define the trajectory. For $x(t)$ (a cubic spline), two samples, along with two derivatives at those samples (which can be computed using system dynamics from $x(t)$ and $u(t)$), can fully define the $x(t)$ trajectory. 
 
-The optimization does require constraints on the dynamics of the system: $x(t_k{k+1}) = x(t_k) + \int_{t_k}^{t_{k+1}} f(x(t), u(t)) dt$. These constraints are applied at each collocation point of the system.
+Clarification: there is a separate 1st order hold for $u(t)$ and cubic polynomial for $x(t)$ between each sample point.
+
+The optimization does require constraints on the dynamics of the system: $x(t_{k+1}) = x(t_k) + \int_{t_k}^{t_{k+1}} f(x(t), u(t)) dt$. These constraints are applied at each collocation point of the system. The collocation points are chosen at the midpoints (in the time-axis) between each breakpoint. 
+
+<center><img src="Media/collocation.png" style="width:45%"/></center><br />
+
+where each $t(k)$ is a breakpoint time, and $h$ is the time step. Euler integration is used to apply the dynamics from $x(t_k)$ (sample point) to $x(t_{c,k})$ (collocation point). 
 
 Overall, the optimization is expressed like so:
 
@@ -141,8 +147,11 @@ $$ \begin{align*}
 (Sidenote: we're also multiplying $\Delta t$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost.)
 
 
+## Trajectory Stabilization
 
-## Model Predictive Control (MPC)
+Stabilization = how to follow the trajectory accurately. Generally an easier problem than solving for a globally optimal trajectory.
+
+### Model Predictive Control (MPC)
 
 **Repeat every time step:**
 1. Estimate current state $\hat{x}$
@@ -151,6 +160,34 @@ $$ \begin{align*}
 
 Note: you must solve the traj opt multiple steps into the future even if you discard $u[1] ... u[N]$, since you cannot have an "optimal control" unless you consider the future.
 
-Recursive feasibility:
+Recursive feasibility: if a feasible solution found in one time step, should not be lost in future time steps. (this is true if the model of the dynamics is accurate)
 
 
+### Linearizing around Trajectory
+
+Call $x_0(t)$ and $u_0(t)$ the trajectory points at time $t$. We will linearize around these points.
+
+Then, $\tilde{x} = x - x_0(t)$ and $\tilde{u} = u - u_0(t)$.
+
+Performing the linearization using a 1st-order Taylor Series:
+
+$$\begin{align*}
+    \dot{x} &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}(u-u_0) \\ 
+    &= \dot{x}_0(t) + \frac{\delta f}{\delta x}\bigg |_{x_0(t),u_0(t)} (x-x_0(t)) + \frac{\delta f}{\delta u}(u-u_0(t)) \\
+    \dot{\tilde{x}} &= A(t)\tilde{x} + B(t)\tilde{u}
+
+\end{align*}$$
+
+Notice how $A$ and $B$ are no longer constant--we call this now a time-varying system.
+
+LQR still works even if $A$ and $B$ are time-varying; so, to control this, we use finite-horizon LQR:
+
+$$ \min_{u(t)} \int_0^{t_f} \tilde x^T(t)Q \tilde x(t) + \tilde u^T(t)R \tilde u(t) ~dt $$
+
+$$\dot{\tilde x}(t) = A(t) \tilde x(t) + B(t) \tilde u(t)$$
+
+Then the solution looks like this (the optimal cost to go is now a function of time):
+
+$$J^*(x,t) = \tilde x^TS(t) \tilde x $$
+
+$$\tilde u = -K(t) \tilde x$$

@@ -37,3 +37,16 @@ When constraints touch only a small number of decision variablese each, this can
 ### SNOPT 
 
 Sequential Quadratic Programming (SQP): Repeatedly takes local quadratic approximations of optimization landscape (by taking gradients at multiple points), linear approximations of the constraints, then solves QP, the repeats. Similar to gradient descent (but is 2nd order) (so it converges faster and gracefully handles constraints).
+
+### Non-collision Constraints
+
+Strategy 1: binary result from collision engine (NOT GOOD; provides no gradient information for solver).
+
+Strategy 2: signed distance funtions (SDF) between all collision pairs: $\phi_{i,j}(q)$. Add a single constraint on the minimum signed distance between any collision pair: 
+$$\min_{i,j} \phi_{i.j}(q) \geq d_{min}$$
+
+In addition, you would typically use a $\text{softmin}$ to make the function differentiable.
+
+Note: in practice, collision engine will do a rough approximation (i.e. axis-aligned bounding boxes) of SDF to prune away irrelevant collision pairs, then only compute an accurate signed distance for close objects.
+
+Note: this is always a non-convex constraint (think about it--you are bounding all valid states to be outside of an object--then you can easily pick two states that fail the convexity test (the line between them stays in the set)).

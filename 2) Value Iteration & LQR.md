@@ -58,7 +58,9 @@ $$ \int l_c(x, u) dt $$
 
 To solve for the optimal control action $u$ given, we need to do two things; first, we must solve for the optimal cost-to-go function $J^*(x)$ using value iteration, then we use the Hamilton-Jacobi-Bellman (HJB) equation to solve for $u$ using $J^*(x)$:
 
-$$ \forall x ~ 0=\min_u \bigg [\ell(x,y) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u) \bigg ]$$
+$$ \forall x ~ 0=\min_u \bigg [\ell(x,u) + \frac{\delta J^*}{\delta x} \bigg|_x f_c(x, u) \bigg ]$$
+
+<center><img src="Media/HJB_in_practice.png" style="width:75%"/></center><br />
 
 First, we will show how to solve for $u$, assuming we know $J^*(x)$. This is simply a matter of solving the optimization problem that is the HJB equation (finding $u$ to mininimize the right-hand-side).
 
