@@ -57,7 +57,7 @@ $$ V(x) \succ 0$$
 $$ \dot{V}(x) = \frac{\delta V}{\delta x} f(x) \prec 0$$
 $$ V(x) \rightarrow \infty ~~\text{whenever}~~ ||x|| \rightarrow \infty$$
 
-This last condition is called "radial instability".
+This last condition is called "radial instability". More precisely, it states that if any elements of $x$ go to $\infty$, $V(x)$ should go to $\infty$.
 
 
 #### Global Exponential Stability   
@@ -80,7 +80,7 @@ If:
 $$ V(x) \succ 0 ~~~\text{and}~~~ \dot{V}(x) \preceq 0$$
 $$ V(x) \rightarrow \infty ~~\text{whenever}~~ ||x|| \rightarrow \infty$$
 
-Then $x$ will converge to the largest "invariant set" where $\dot{V}(x) = 0$. An "invariant set" is the set of $x$ where, once the system enters the set, it never leaves. The largest invariant set is simply the union of all invariant sets. Basically, if $\dot{V}(x)$ is only negative semidefinite instead of negative definite, LaSalle's states that the system will converge to anywhere in the largest invariant set, instead of just where $V(x)=0$.
+Then $x$ will converge to the largest "invariant set" where $\dot{V}(x) = 0$. An "invariant set" is the set of $x$ where, once the system enters the set, it never leaves; this is pretty much synonymous with a sub-level set of $V(x)$ (since $V(x)$ will never increase). The largest invariant set is simply the union of all invariant sets. Basically, if $\dot{V}(x)$ is only negative semidefinite instead of negative definite, LaSalle's states that the system will converge to anywhere in the largest invariant set, instead of just where $V(x)=0$.
 
 Note: $\dot{V}(x) \preceq 0$ means $\dot{V}(x) \leq 0$ and $\dot{V}(x) = 0$ within the invariant set of convergence.
 
@@ -333,6 +333,10 @@ Let's define the region of attraction using sublevel sets of our Lyapunov functi
 Applying the same method as above, we need to solve for $\alpha$:
 
 $$ -\dot{V}(x) = \lambda_\alpha(x)(\rho - V(x)) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
+
+In other words:
+
+$$ \dot{V}(x) + \lambda_\alpha(x)(\rho - V(x)) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
 
 This is limited; it requires a Lyapunov candidate $\rho$ and simply produces a certificate (however, if you linearize the system, you could easily find a candidate Lyapunov using SDP as shown above, so this method isn't entirely useless). If we want to at least leave $\rho$ an unknown (i.e. to solve for the largest region of attraction), we cannot simply make $\rho$ a decision variable; this will introduce bilinearity between deision variables, breaking convexity of the optimization. It is, however, easy to simply run this optimization multiple times with different $\rho$ and perform a linear search for the best $\rho$
 

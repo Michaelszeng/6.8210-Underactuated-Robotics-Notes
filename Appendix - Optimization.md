@@ -20,7 +20,7 @@ For simple conex optimizations (QP, LP), adding decision variables is cheap. In 
 
 ### Intuition of Convex Optimization
 
-It's clear how a convex cost function is necessary. In addiiton, linear constraints don't cause a problem to lose its convexity, since linear constraints essentially draw hyperplanes in the decision-variable space which construct a convex set.
+It's clear how a convex cost function is necessary. In addition, linear constraints don't cause a problem to lose its convexity, since linear constraints essentially draw hyperplanes in the decision-variable space which construct a convex set.
 
 ### Making Absolute Value Objective solveable with Linear Programming
 
@@ -37,6 +37,15 @@ When constraints touch only a small number of decision variablese each, this can
 ### SNOPT 
 
 Sequential Quadratic Programming (SQP): Repeatedly takes local quadratic approximations of optimization landscape (by taking gradients at multiple points), linear approximations of the constraints, then solves QP, the repeats. Similar to gradient descent (but is 2nd order) (so it converges faster and gracefully handles constraints).
+
+### SDP Feasibility Problems (and what to set the Cost as)
+
+Often, the goal of SDP problems is to find any feasible solution. Even so, it is best to add some cost function to give a more numerically-controlled answer.
+
+A frequent choice is $ \min tr(P) $. Why:
+ - $tr(P) = $ sum of eigenvalues of $P$. The definition of a PSD matrix is non-negative eigenvalues--so we're asking for the matrix to be PSD but not to be too extreme.
+ - $P$ won't just go to 0 in practice since we actually write the PSD constraint to be something like $P - \epsilon \succeq 0; so $P$ will be at least $\epsilon$
+ - Minimizing trace can also produce sparser matrices.
 
 ### Non-collision Constraints
 
