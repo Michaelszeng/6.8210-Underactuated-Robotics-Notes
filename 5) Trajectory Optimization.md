@@ -172,7 +172,7 @@ Then, $\tilde{x} = x - x_0(t)$ and $\tilde{u} = u - u_0(t)$.
 Performing the linearization using a 1st-order Taylor Series:
 
 $$\begin{align*}
-    \dot{x} &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}(u-u_0) \\ 
+    \dot{x} &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}\bigg |_{x_0(t),u_0(t)} (u-u_0) \\ 
     &= \dot{x}_0(t) + \frac{\delta f}{\delta x}\bigg |_{x_0(t),u_0(t)} (x-x_0(t)) + \frac{\delta f}{\delta u}(u-u_0(t)) \\
     \dot{\tilde{x}} &= A(t)\tilde{x} + B(t)\tilde{u}
 
