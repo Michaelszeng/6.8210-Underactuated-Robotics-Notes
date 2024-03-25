@@ -62,6 +62,8 @@ $$ \forall x ~ 0=\min_u \bigg [\ell(x,u) + \frac{\delta J^*}{\delta x} \bigg|_x 
 
 <center><img src="Media/HJB_in_practice.png" style="width:75%"/></center><br />
 
+Note: you can still solve for $u$ even if your $J(x)$ is not optimal; it's just that your resulting $u^*$ may just be sub-optimal (and also the right side of HJB will not evaluate to $0$).
+
 First, we will show how to solve for $u$, assuming we know $J^*(x)$. This is simply a matter of solving the optimization problem that is the HJB equation (finding $u$ to mininimize the right-hand-side).
 
 In the discreet time/state/action DP algorithm, we could evaluate over all possible $u$ and pick the best. In continuous action space, this is not possible. Either we need to solve for $u$ analytically or use numerical methods (like gradient descent). We will take a look at a special case where we can solve for $u$ analytically: the system must be "control affine", meaning that the acceleration of the system is linear with torque, plus some constant not dependent on $u$:
@@ -86,7 +88,7 @@ $$ u^* = -\frac{1}{2} R^{-1} f_2^T(x) \frac{\delta J^T}{\delta x} $$
 
 However, if we have limits on $u$ (i.e. torque limits), which would be linear constraints on $u$, then $u^*$ can be easily solved as a Quadratic Program.
 
-Now, we are able to find the optimal $u^*$ for any given cost function and state. In a real robotic system with some loop speed, you essentially solve for $u^*$ every loop, apply it to the robot, measure changes in state, and repeat.
+Now, we are able to find the optimal $u^*$ for any given cost function and state. This is a control policy, so once we have $u^*$, we know how to apply the optimal controls for our system from any state.
 
 
 #### General Case
@@ -125,7 +127,7 @@ Now, we need to find $u$ to minimize the equation above (as required by HJB). To
 
 Now, it's clear how HJB can solve for $u^*$ given $J^*(x)$; but how do we calculate the function $J^*(x)$ in the first place?
 
-Sidenote: It's also possible to use $\hat{J}^*(x)$ itself to compute the optimal policy $u$ (so, no need to apply HJB, although HJB would be faster). For example: store a table of each $u(x)$ during value iteration (however, this won't work well for continuous state space); if you explore all states even after convergence, then $u$ will be optimal for each $x$.
+Sidenote: It's also possible to use $\hat{J}^*(x)$ itself to compute the optimal policy $u^*$ instead of solving for $u^*$ from HJB (although simply solving from HJB would be faster). For example: store a table of each $u(x)$ during value iteration (however, this won't work well for continuous state space); if you continue exploring all states even after convergence, then $u$ will be optimal for each $x$.
 
 ### Solving for $J^*(x)$ using Value Iteration with a Mesh & Interpolation
 
@@ -206,9 +208,14 @@ is $K \times N$, and $\alpha$ is an $N \times 1$ vector of scalars. One advantag
 It's pretty easy to see that this solution for $\alpha$ does satisfy $ \alpha = \argmin_\alpha \sum_k \bigg( \hat{J_\alpha^*}(x_k) - J_k^d \bigg) $; plugging this solution for $\alpha$ into $\hat{J}_\alpha^*(x)=\psi^T(x)\alpha$ yields $\hat{J}_\alpha^*(x) = J^d_k$. Therefore, approximating $J^*$ using any linear function approximator will guarantee $\hat{J}^*$ coverges to $J^*$.
 
 
-### More Detail on HJB
+### HJB Fundamentals
 
-It's a bit degrading to think of HJB as just a mechanism to solve for $u$ given $J^*$; in general, HJB is a fact/an optimality condition. If your policy and cost-to-go are optimal, the HJB will be true. (This is the HJB Sufficiency Theorem).
+It's a bit degrading to think of HJB as just a mechanism to solve for $u$ given $J^*$; in general, HJB is a *sufficiency theorem* (note the difference between "sufficient" for optimality and "necessary" for optimality). If your policy and cost-to-go satisfy HJB, you can be sure that your policy is optimal.
+
+There are, however, many caveats to be careful of:
+ - even if your policy and cost-to-go satisfy HJB, this does not mean your cost-to-go is optimal. For example, adding a constant to an optimal cost-to-go function makes it no longer optimal, but may still satisfy HJB. Satisfying HJB is only sufficient to show optimality of your *policy*.
+ - HJB is a necessary condition only *if* you know that the *optimal* cost-to-go function is continuously differentiable. If not, HJB doesn't really apply (since the HJB equation involves a derivative of the cost-to-go). An example is a bang-bang controller; the cost-to-go of a bang-bang controller is not differentiable [(proof)](https://underactuated.mit.edu/dp.html#minimum_time_double_integrator), so HJB is not applicable. 
+ - In general, finding the optimal cost-to-go function $J^*$ is probably impossible. We know the optimal cost-to-go functions for some canonical systems (i.e. a linear system, which has optimal cost-to-go of the form $J^* = x^TSx$), but for most systems, we have to get an approximation of $J^*$ (i.e. using Neural-fitted cost-to-go functions, linear function approximators). In these cases, you can forget about HJB optimality since you'll never find $J^*$ anyway.
 
 To get a better understanding of why HJB is a condition for optimality, we first do an informal derivation of the equation:
 

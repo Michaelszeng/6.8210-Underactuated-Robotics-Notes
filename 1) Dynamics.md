@@ -119,6 +119,8 @@ Types of Lyapunov (local) Stability; if $x^*$ is the stable point:
 
 Note: Lyapunov analysis only applies to passively dynamic systems (no external forcing).
 
+Note: Attractivity does not imply stability i.s.L. For example, a pendulum with an energy-shaping controller is attractive to the homoclinic orbit, but is not stable to any fixed point (since the pendulum can rotate infinitely on the homoclinic orbit).
+
 Now, stable point drawn as block dots, unstable points drawn as circles:
 
 <center><img src="Media/overdamped_stability.png" style="width:45%"/></center><br />
