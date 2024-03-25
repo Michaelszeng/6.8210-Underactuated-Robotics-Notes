@@ -332,10 +332,6 @@ Let's define the region of attraction using sublevel sets of our Lyapunov functi
 
 Applying the same method as above, we need to solve for $\alpha$:
 
-$$ -\dot{V}(x) = \lambda_\alpha(x)(\rho - V(x)) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
-
-In other words:
-
 $$ \dot{V}(x) + \lambda_\alpha(x)(\rho - V(x)) \text{ is SOS}, ~~~ \lambda_\alpha(x) \text{ is SOS} $$
 
 This is limited; it requires a Lyapunov candidate $\rho$ and simply produces a certificate (however, if you linearize the system, you could easily find a candidate Lyapunov using SDP as shown above, so this method isn't entirely useless). If we want to at least leave $\rho$ an unknown (i.e. to solve for the largest region of attraction), we cannot simply make $\rho$ a decision variable; this will introduce bilinearity between deision variables, breaking convexity of the optimization. It is, however, easy to simply run this optimization multiple times with different $\rho$ and perform a linear search for the best $\rho$
@@ -379,6 +375,23 @@ We need to optimize a few things here--the parameters of $V(x)$, and $\lambda$ a
 <center><img src="Media/lyapunov_and_roa_opt.png" style="width:45%"/></center><br />
 
 
+## Controller Design using Lyapunov
+
+### Lyapunov for Control Design for Linear Systems (Linear State Feedback)
+
+For a linear system, we can easily solve for a stabilizing controller by parameterizing our controller as $u = Kx$. Then, system dynamics become $\dot{x} = (A + BK)x$.
+
+Then, for this system to be stable, we solve the same SDP optimization as described above (for $P$ and $K$):
+
+$$ P = P^T \succ 0, \quad P(A+BK)+(A+BK)^T P \prec 0$$
+
+However, this is a non-convex bilinear optimization, so to bring back convexity, we perform a change of coordinates: $Q = P^{-1}$, $Y = KP^{-1}$. Then, the optimization becomes for $Q$ and $Y$:
+
+$$ Q = Q^T \succ 0, \quad AQ + QA^T + BY + Y^T B^T \prec 0$$
+
+Of course, once you solve $Q$ and $Y$, you can reverse the change of variables to get $P$ and $K$.
+
+
 ### Lyapunov for Control Design for Polyomial Systems
 
 Parameterize controller as $u =K(x)$ where $K(x)$ is a polynomial vector.
@@ -393,12 +406,32 @@ This requires a feasible initial guess for $V$ or $K$; one way we can do this is
 
 If we do not seek to solve for global stability, and instead, for a region of attraction, then we must alternate between 3 optimizations: for $V$, for $K$, and for $\lambda$ and $\rho$.
 
-Although this alternating convex optimization is a non-convex joint operation, it staisfies recursive fasibility (once we have found a feasible solution, we will not lose it) and monotonic improvement (on each objective).
+Although this alternating convex optimization is a non-convex joint operation, it satisfies recursive feasibility (once we have found a feasible solution, we will not lose it) and monotonic improvement (on each objective).
 
 The expression of the nonconvex optimization for $V$, $K$, $\lambda$, and $\rho$:
 
 <center><img src="Media/certified_control_design_lyapunov.png" style="width:55%"/></center><br />
 
+
+
 The alternating convex optimization version:
 
+
+
 <center><img src="Media/certified_control_design_lyapunov_alternations.png" style="width:60%"/></center><br />
+
+
+
+
+
+### Control-Lyapunov Functions
+
+The previous definitions of Lyapunov stability ivestigate stability with a defined control policy $u$, which is perfectly sufficient for studying local regions of attraction (where you would change $u$ when investigating a different fixed point).
+
+However, we might be interested on determining global stability for any possible $u$; in this case, it's more flexible to simply verify that, at each $x$, there exists some $u$ to move toward stability
+
+<center><img src="Media/control_lyapunov.png" style="width:50%"/></center><br />
+
+Of course, we must constraint $V(x) \succ 0$ and radial instability for global stability.
+
+This optimization is hard to solve due to the $\exists$ quantifier; for now the point is to know this idea exists.
