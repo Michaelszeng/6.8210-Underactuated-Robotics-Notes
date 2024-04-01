@@ -244,7 +244,7 @@ Math Note: $\frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u)$ can be seen as the 
 
 LQR is one tool for linear systems that we can derive from HJB.
 
-LQR solves optimal control for a system with Linear dynamics + quadratic cost, where the goal is to stabilize to $x^* = 0$ with minimum cost (at the bottom of the quadratic cost function). 
+LQR solves optimal control for a system with Linear dynamics + infinite horizon quadratic cost, where the goal is to stabilize to $x^* = 0$ with minimum cost (at the bottom of the quadratic cost function). 
 
 More specifically, LQR works on system dynamics of the form:
 
@@ -262,11 +262,13 @@ In short, this is the formulation of LQR:
 
 
 
-And LQR, given $A, B, Q, R$, spits out the $S$ and $K$ that stabilizes $x$ to 0, where the optimal controller is $u(x) = -Kx$.
+And LQR, given $A, B, Q, R$, spits out the $S$ and $K$ that stabilizes $x$ to 0, where the optimal controller is $u(x) = -Kx$ and the optimal cost-to-go is $J^*(x) = x^TSx$.
+
+Note: $S$ and $K$ can be pre-computed, so when using LQR, the only online computation is $-Kx$ and $x^TSx$.
 
 ## LQR Derivation
 
-It's known that the quadratic cost-to-go is of the form:
+It's known that the quadratic cost-to-go is of the form (where $S \succ 0$):
 
 $$ J^*(x) = x^T Sx $$
  

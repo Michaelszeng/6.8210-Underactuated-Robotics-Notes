@@ -54,6 +54,8 @@ We can also pick $l_f(x[N]) = x^T S x$, where $S$ is the solution to the LQR for
 
 Also note--$N$ must be selected manually; if $N$ were a decision variable of the optimization, then the number of $x[\cdot]$ and $u[\cdot]$ decision variables would be variable. However, if, for example, you want to solve a minimum time problem to a particular $x_f$, you can solve the optimiztion multiple times until you find the minimum $N$ where a feasible answer is still produced.
 
+Note that Direct Transcription can be used with non-linear systems--instead of constraining $x[n+1] = Ax[n] + Bu[n]$, you have $x[n+1] = f(x[n], u[n])$.
+
 #### Discretization Errors
 
 With discrete-time dynamics, there is some discretization error. For example, if you have continuous dynamics:
@@ -70,7 +72,7 @@ With linear systems only, there is a possibility of removing this error by takin
 
 $$ x[n+1] = x[n] + \int_{t_n}^{t_n + \Delta t} (Ax[n] + Bu[n])dt = \Delta t*(e^{A*dt} x[n] + Bu[n]) $$
 
-However, with discreet time systems, there is one discrtization error that is not possible to resolve: $u$ is only parameterized at each time step (rather than being a continuous function), losing accuracy and optimality.
+However, with discreet time systems, there is one discretization error that is not possible to resolve: $u$ is only parameterized at each time step (rather than being a continuous function), losing accuracy and optimality.
 
 
 ### Direct Shooting
@@ -149,45 +151,128 @@ $$ \begin{align*}
 
 ## Trajectory Stabilization
 
-Stabilization = how to follow the trajectory accurately. Generally an easier problem than solving for a globally optimal trajectory.
+The basic problem with direct transcription/shooting/collocation is that they solve for the trajectory given the initial state... and that is all. They don't use any feedback to ensure the robot actually follows that trajectory in real life.
 
-### Model Predictive Control (MPC)
+Therefore, direct transcription/shooting/collocation are not enough in real life. Real life has small disturbances (plus, if you are using Euler Integration or an approximated method of integration to roll forward your dynamics, this introdues more inaccuracy) that will cause the system to miss the trajectory.
 
-**Repeat every time step:**
-1. Estimate current state $\hat{x}$
-2. Solve traj opt w/ $x[0] = \hat{x}$ for $N$ steps into the future
-3. Execute $u[0]$
+This is where Trajectory Stabilization comes into play.
 
-Note: you must solve the traj opt multiple steps into the future even if you discard $u[1] ... u[N]$, since you cannot have an "optimal control" unless you consider the future.
-
-Recursive feasibility: if a feasible solution found in one time step, should not be lost in future time steps. (this is true if the model of the dynamics is accurate)
-
-
-### Linearizing around Trajectory
+### Local LQR (Linearizing around Trajectory)
 
 Call $x_0(t)$ and $u_0(t)$ the trajectory points at time $t$. We will linearize around these points.
 
-Then, $\tilde{x} = x - x_0(t)$ and $\tilde{u} = u - u_0(t)$.
+Then, $\tilde{x}(t) = x(t) - x_0(t)$ and $\tilde{u}(t) = u(t) - u_0(t)$.
 
 Performing the linearization using a 1st-order Taylor Series:
 
 $$\begin{align*}
-    \dot{x} &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}\bigg |_{x_0(t),u_0(t)} (u-u_0) \\ 
+    \dot{x}(t) &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}\bigg |_{x_0(t),u_0(t)} (u-u_0) \\ 
     &= \dot{x}_0(t) + \frac{\delta f}{\delta x}\bigg |_{x_0(t),u_0(t)} (x-x_0(t)) + \frac{\delta f}{\delta u}(u-u_0(t)) \\
-    \dot{\tilde{x}} &= A(t)\tilde{x} + B(t)\tilde{u}
+    \dot{\tilde{x}}(t) &= A(t)\tilde{x} + B(t)\tilde{u}
 
 \end{align*}$$
 
 Notice how $A$ and $B$ are no longer constant--we call this now a time-varying system.
 
-LQR still works even if $A$ and $B$ are time-varying; so, to control this, we use finite-horizon LQR:
+LQR still works even if $A$ and $B$ are time-varying, and given a finite horizon ($t_f$ = time trajectory ends). The problem formulation looks almost identical to classic LQR:
 
-$$ \min_{u(t)} \int_0^{t_f} \tilde x^T(t)Q \tilde x(t) + \tilde u^T(t)R \tilde u(t) ~dt $$
+$$ \min_{u(t)} \int_{t_{now}}^{t_f} \tilde x^T(t)Q \tilde x(t) + \tilde u^T(t)R \tilde u(t) ~dt $$
 
 $$\dot{\tilde x}(t) = A(t) \tilde x(t) + B(t) \tilde u(t)$$
 
-Then the solution looks like this (the optimal cost to go is now a function of time):
+The solution looks like this (the optimal cost to go is now a function of time because the horizon is finite (intuitively, being at a far-away state at $t=0$ is much less bad thn being at a far-away state at $t$ close to $t_f$))  (where $S(t) \succ 0$):
 
 $$J^*(x,t) = \tilde x^TS(t) \tilde x $$
 
-$$\tilde u = -K(t) \tilde x$$
+$$\tilde u^* = -K(t) \tilde x$$
+
+This simple control strategy--re-linearizing and re-applying LQR with a finite-horizon at a fixed loop speed--can achieve very robust control with real world disturbances.
+
+Note: LQR assumes the target state can be reached by $t_f$. In the classic (infinite-horizon) LQR case, the target state can obviously be reached in infinite time. In the finite-horizon LQR case, we are giving the controller authority over the duration of the trajectory.
+
+Note: using LQR to solve means we cannot add other constraints like input limits or state constraints.
+
+Note: you ***can*** have even $Q$ and $R$ be functions of time.
+
+Note: Having a cost-to-go function that is a function of time --> HJB equation is slightly different (has additional partial derivative w.r.t time term): 
+$$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_{x,t} f_c(x, u) + \frac{\delta J^*}{\delta  t} \bigg|_{x,t} \bigg ] $$
+
+This means the solution for $S(t)$ is also different: $Q-S(t)B(t)R^{-1}B^T(t)S(t) + 2S(t)A(t) = -\dot{S}(t)$
+
+
+
+
+#### Limitation of Time-Varying Linearization
+
+Trajectories are solved as functions of time. Therefore, if there are unexpected forces/dynamics applied on the system, the nominal point around which linearization is done, $x_0, u_0$, will continue moving forward in time even though the system is no longer following the trajectory; in this case, $\tilde{x}$ and $\tilde{u}$ can increase significantly, making the linearization less and less accurate. The control policy can fail in this case.
+
+Simply remapping time by always performing the linearization around the nearest $x, u$ on the trajectory to the current $x, u$, can introduce other instabilities, so is not a good option either. TODO: give example
+
+
+### Time-Varying Lyapunov
+
+If we locally linearize as with the "Local LQR" method, we can analyze the stability of the resulting time-varying system. We can write time-varying Lyapunov conditions:
+
+$$\forall t \quad V(x, t) \succ 0, ~V(0, t) = 0$$
+$$ \dot{V}(t, x) = \frac{\delta V}{\delta x} f(x) + \frac{\delta V}{\delta t} \preceq 0$$
+
+Or, if we're intersted in how much perturbation around the planned trajectory the system can take to still arrive at the target state (i.e. certifying regions of attraction):
+
+$$ V(x, t) \leq \rho(t) \implies \dot{V}(x, t) \leq \dot{\rho}(t) \quad \forall t \in [t_0, t_f] $$
+
+where we can parameterize $\rho(t)$ as a polynomial. 
+
+Using LQR as our controller, we get an optimal cost-to-go function $ J^*(x) = x^T Sx $ (where $S \succ 0$) that we can use as our Lyapunov function (recall that cost-to-go functions are weakly decreasing). Then, $\rho(t)$ can be solved with an SOS optimization:
+
+Common in practice is to actually sample discrete times along the trajectory and solve for $\rho$ at each sample to get an approximation of $\rho(t)$. To solve for each $\rho$, we use the method discussed in *4) Lyapunov Analysis*:
+
+<center><img src="Media/roa_opt.png" style="width:45%"/></center><br />
+
+where $d$ is a fixed positive integer, and we use the appropriate $A(t), B(t), K(t), S(t)$ for the sampled time.
+
+Knowing $\rho(t)$ gives us an idea of the size of the region of stability for the system and controller (this is simply an analysis tool).
+
+
+### Model Predictive Control (MPC)
+
+**Repeat every time step:**
+1. Estimate current state $\hat{x}$
+2. Solve traj opt w/ $x[0] = \hat{x}$ for $N$ steps into the future ("receding horizon"), i.e. using direct collocation
+3. Execute $u[0]$ and let dynamics evolve
+
+Note: you must solve the traj opt multiple steps into the future even if you discard $u[1] ... u[N]$, since you cannot have an "optimal control" unless you consider the future.
+
+Recursive feasibility is an important notion: if a feasible solution is found in one time step, it should not be lost in future time steps. The basic formultion of MPC does not have this; by having a receding horizon, essentially every time step, MPC adds a new constraint at a future time that has not been considered before; this constraint could cause sudden infeasibility. There are a few ideas to combat this:
+ - Add a constraint that $x[k+N+1] = x^*$ (where $k$ is the current time step), where $x^*$ is the target state at the end of the trajectory. If the controller can get to $x^*$ by $t = k + N$, then it is sure to be feasible to get there in time steps beyond that. (This only works for short trajectories or very long horizons)
+    - Extension: if you can define a "safe set" where you know the system can converge to $x^*$ from this set, constraint $x[k+N+1]$ to be in this set.
+ - "heuristic penalty / heuristic constraint on the last couple of states" - TODO: update this
+
+
+### Linear Model Predictive Control (MPC)
+
+Same principle as MPC, but perform a linearization of the system around the current state at each time step, then perform linear optimal control (general MPC might just do a nonlinear optimization), i.e. with direct transcription or direct shooting. The reason for this is that convex optimization can give you guarantees of optimality and feasibility that non-convex optimization cannot.
+
+This is also very similar to Local LQR, except we don't restrict ourselves to an LQR cost and optimization, so Linear MPC can still solve optimizations with other linear constraints. 
+
+The downside to Linear MPC compared to Local LQR is 
+
+You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are far from the linear constraints, and switching to MPC otherwise. Local LQR is more computationally efficient, and Local LQR is more tractable for analysis (i.e. SOS optimization for verifying regions of attraction).
+
+
+
+## Case Study: Perching Plane
+1. Direct Collocation to solve trajectory
+2. Linearization + LQR to stabilize along trajectory
+3. Cost-to-go from LQR as Lyapunov function (cost-to-go strictly decreases each time step)
+4. Find largest $\rho(t)$
+
+
+## iLQR (Iterative LQR)
+
+Summary: Trajectory Optimization using LQR stabilization.
+
+Similar to Finite Horizon LQR, iLQR begins with a nominal trajectory (solved i.e. with direct collocation) $x[\cdot], u[\cdot]$, then performs a linearization of state dynamics around a nominal point $x_0, u_0$. iLQR also performs a quadraticization of the cost function (if it were not already quadratic).
+
+Each iteration of the algorithm, there are two steps:
+1. Backward Pass: Same as Finite Horizon LQR, LQR is solved for the optimal control policy and cost-to-go at the current time given the current optimal trajectory
+2. Forward Pass: Applies the optimal cost-to-go to the system dynamics 
