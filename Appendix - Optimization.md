@@ -22,6 +22,10 @@ For simple conex optimizations (QP, LP), adding decision variables is cheap. In 
 
 It's clear how a convex cost function is necessary. In addition, linear constraints don't cause a problem to lose its convexity, since linear constraints essentially draw hyperplanes in the decision-variable space which construct a convex set.
 
+### LQR - Adding Constraints
+
+I have written in these notes that it is not possible to solve LQR with added constraints (i.e. input limits, state constraints). One way to get around this is with [penalty methods](https://en.wikipedia.org/wiki/Penalty_method), especially using [Augmented Lagrangian](https://en.wikipedia.org/wiki/Augmented_Lagrangian_method). 
+
 ### Making Absolute Value Objective solveable with Linear Programming
 
 Instead of solving: 

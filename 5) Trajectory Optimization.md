@@ -271,8 +271,25 @@ You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are
 
 Summary: Trajectory Optimization using LQR stabilization.
 
-Similar to Finite Horizon LQR, iLQR begins with a nominal trajectory (solved i.e. with direct collocation) $x[\cdot], u[\cdot]$, then performs a linearization of state dynamics around a nominal point $x_0, u_0$. iLQR also performs a quadraticization of the cost function (if it were not already quadratic).
+iLQR borrows many ideas from Local LQR. The algorithm begins with a nominal trajectory (solved i.e. with direct collocation) $x[\cdot], u[\cdot]$, and solves Local LQR problems iteratively. 
 
-Each iteration of the algorithm, there are two steps:
-1. Backward Pass: Same as Finite Horizon LQR, LQR is solved for the optimal control policy and cost-to-go at the current time given the current optimal trajectory
-2. Forward Pass: Applies the optimal cost-to-go to the system dynamics 
+**In detail, these are the steps of the algorithm:**
+
+For all time steps in the trajectory:
+1. Linearize state dynamics around each trajectory point $x_0(t), u_0(t)$, and quadraticize the cost function (if it were not already quadratic). We should have the following:
+
+$$ l(x, u) = \tilde x^T(t)Q \tilde x(t) + \tilde u^T(t)R \tilde u(t) ~dt $$
+
+$$\dot{\tilde x}(t) = A(t) \tilde x(t) + B(t) \tilde u(t)$$
+
+1. Backward Pass: Plug the linearzied state dynamics and quadraticized cost function into the Finite Horizon LQR algorithm to get the optimal control policy and cost-to-go for each time step in the trajectory. We should have the following:
+
+$$J^*(x,t) = \tilde x^TS(t) \tilde x $$
+
+$$\tilde u^* = -K(t) \tilde x$$
+
+2. Forward Pass: Apply the optimal control inputs to the original (nonlinear) system dynamics for each time step in the trajectory, while keeping track of running total cost. This will result in a new, likely different trajectory than the nominal trajectory (due to linearization errors)
+
+Repeat this process until convergence (the total cost stops decreasing between interations).
+
+Intuitive explanation: the backward pass finds $u$ that will approximately optimize the total cost given the current trajetory. The forward pass then applies/simulates this $u$ to measure the true total cost and true trajectory that the backward pass found. As this process repeats, the trajectory should gradually become more optimal.
