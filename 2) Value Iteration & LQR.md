@@ -129,6 +129,10 @@ Now, it's clear how HJB can solve for $u^*$ given $J^*(x)$; but how do we calcul
 
 Sidenote: It's also possible to use $\hat{J}^*(x)$ itself to compute the optimal policy $u^*$ instead of solving for $u^*$ from HJB (although simply solving from HJB would be faster). For example: store a table of each $u(x)$ during value iteration (however, this won't work well for continuous state space); if you continue exploring all states even after convergence, then $u$ will be optimal for each $x$.
 
+Sidenote; all of these methods for approximating $J^*(x)$ are only feasible for rough approximations or low dimensions due to computational load.
+
+Sidenote: textbook on the math for solving for $J^*(x)$ analytically (which is only possible for a handful of systems): https://meyn.ece.ufl.edu/wp-content/uploads/sites/77/archive/spm_files/Courses/ECE555-2011/555media/PagesFrom515text.pdf
+
 ### Solving for $J^*(x)$ using Value Iteration with a Mesh & Interpolation
 
 This is basically discretizing the cost-to-go function as a set/mesh of points, with interpolation between points on the mesh. If you must calculate $\hat{J}^*(x)$ at some $x$ that isn't at a point on the mesh, then you use an interpolated $\hat{J}^*$ value:
@@ -288,7 +292,7 @@ However, we still need to find the optimal $S$. We can plug $u^*$ back into HJB:
 
 $$ 0 = x^T[Q-SBR^{-1}B^TS + 2SA]x $$
 
-This must hold for all $x$, so we can sort of "divide" $x$ out. Then $Q-SBR^{-1}B^TS + 2SA = 0$, and we must solve for $S$. This is complicated; in practice, your numerical tookbox (i.e. drake, matlab) will have a function that will return $S$ and $K$ given $Q,R,A,B$.
+This must hold for all $x$, so we can sort of "divide" $x$ out. Then $Q-SBR^{-1}B^TS + 2SA = 0$, and we must solve for $S$. This is complicated; in practice, your numerical toolbox (i.e. drake, matlab) will have a function that will return $S$ and $K$ given $Q,R,A,B$.
 
 LQR works for a variety of systems; even systems without linear dynamics or quadratic cost, you can take linear/quadratic approximations and still get good control.
 

@@ -48,3 +48,7 @@ $$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u
  - $f(x,u)$ is $n \times 1$
 
 When manually solving for $u^*(x)$ (given a cost-to-go function), you can remove all terms from the right-hand-side that do not have $u$ terms.
+
+# Matrix Calculus
+
+The derivative of a funtion w.r.t a columnn vector is a row vector.
