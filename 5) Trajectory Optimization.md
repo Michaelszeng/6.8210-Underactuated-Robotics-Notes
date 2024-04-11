@@ -148,6 +148,8 @@ $$ \begin{align*}
 
 (Sidenote: we're also multiplying $\Delta t$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost.)
 
+Most solvers will also allow you to apply an initial guess for $x[\cdot], u[\cdot]$.
+
 
 ## Trajectory Stabilization
 
@@ -360,9 +362,7 @@ Repeat these two steps process until convergence (the total cost stops decreasin
 
 #### Main Advantage of iLQR
 
-Although it is a more complex algorithm, it is generally less computationally intense than i.e. direct transcription?
-
-iLQR is less hindered by the problems of time-discretization compared to Direct Transcription.
+The primary advantage is for nonlinear systems; for any of the other methods described above (direct transcription, direct shooting, direct collocation), non-convex optimization is required to solve. Meanwhile, iLQR can rely on only convex optimization (at the expense of sacrificing global optimality), which makes it generally more computationally efficient.
 
 
 
