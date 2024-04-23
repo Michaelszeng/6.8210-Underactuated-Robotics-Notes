@@ -72,7 +72,11 @@ With linear systems only, there is a possibility of removing this error by takin
 
 $$ x[n+1] = x[n] + \int_{t_n}^{t_n + \Delta t} (Ax[n] + Bu[n])dt = \Delta t*(e^{A*dt} x[n] + Bu[n]) $$
 
+There are also many numerical integrators that can perform this operation with varying speed/accuracy (https://drake.mit.edu/doxygen_cxx/group__integrators.html0). 
+
 However, with discreet time systems, there is one discretization error that is not possible to resolve: $u$ is only parameterized at each time step (rather than being a continuous function), losing accuracy and optimality.
+
+In general, Direct Transcription is the simplest and easiest for formulate, but the least accurate.
 
 
 ### Direct Shooting
@@ -96,13 +100,13 @@ Except, if you want a $x[N] = x_f$ constraint, you would need to specify $x[N]$ 
 
 Usually, numerically infeasible (requires explicitely computing $A^n$, which usually is not possible on a 64-bit machine).
 
-Also, puts a huge weight on $u[0]$ compared to $u[N]$ ($u[0]$ is multiplied by $A$ to a much higher power), which makes the optimization numerically difficult. While this is true in real life (your first action matters more), this is better distributed in the constraints in Direct Transcription, where the solver can enforce constraints in both directions (i.e. modify an earlier action to fit withn a constraint relative to a later action).
+Also, puts a huge weight on $u[0]$ compared to $u[N]$ ($u[0]$ is multiplied by $A$ to a much higher power), which makes the optimization numerically difficult. While this is true in real life (your first action matters more), this is better distributed in the constraints in Direct Transcription, where the solver can enforce constraints in both directions (i.e. modify an earlier action to fit within a constraint relative to a later action).
 
 In addition, if you do have many constraints on $x$ (i.e. $x[n] \leq 2 ~\forall ~n$), each constraint requires an instance of $A^nx[0] + \sum_{k=0}^{n-1} A^{n-1-k}Bu[k]$, so the efficiency is quickly lost. It's more natural to simply have $x[\cdot]$ as decision variables in practice.
 
 Also, the "sparsity" of the constraints (each constraint touches a small number of decision variables) in Direct Transcription makes it not too bad to solve. 
 
-Direct Transcription is more common in practice.
+Direct Transcription is more common in practice. Direct Shooting is generally only viable for simple trajectories with few/no constraints.
 
 
 ## Non-Linear Systems, Discrete Time (Non-Convex Optimization)
@@ -115,40 +119,40 @@ General formulation of Direct Transcription:
 
 General formulation of Direct Shooting is also ~identical to the linear formulation, except you compose the nonlinear dynamics.
 
-To better approximate continuous-time dynamics, you similarly perform an integration over $\dot{x}$ instead of an Euler integration:
-
-<center><img src="Media/direct_transcription_nonlinear_continuous_time.png" style="width:45%"/></center><br />
-
-There are also many numerical integrators that can perform this operation with varying speed/accuracy (https://drake.mit.edu/doxygen_cxx/group__integrators.html0). 
-
 
 ### Direct Collocation
 
-In general, the formulation is very similar to direct transcription, except the input trajectory and state trajectory are parameterized as piecewise polynomial functions (specifically as first-order polynomials,and cubic polynomials, respectively).
+In general, the formulation is very similar to direct transcription, except the input trajectory and state trajectory are parameterized as piecewise polynomial functions (specifically as first-order polynomials, and cubic polynomials, respectively).
 
-The decision variables for the optimization are simply sample points in $u(t)$ and $x(t)$; for $u(t)$ (a first-order, linear polynomial), two samples fully define the trajectory. For $x(t)$ (a cubic spline), two samples, along with two derivatives at those samples (which can be computed using system dynamics from $x(t)$ and $u(t)$), can fully define the $x(t)$ trajectory. 
+The decision variables for the optimization are simply sample "breakpoints" in $u(t)$ and $x(t)$; for $u(t)$ (a first-order, linear polynomial), two breakpoints fully define the trajectory. For $x(t)$ (a cubic spline), two breakpoints, along with two derivatives at those breakpoints (which can be computed using system dynamics from $x(t)$ and $u(t)$), can fully define the $x(t)$ trajectory. 
 
-Clarification: there is a separate 1st order hold for $u(t)$ and cubic polynomial for $x(t)$ between each sample point.
+Clarification: there is a separate 1st order hold for $u(t)$ and cubic polynomial for $x(t)$ between each breakpoints point.
 
-The optimization does require constraints on the dynamics of the system: $x(t_{k+1}) = x(t_k) + \int_{t_k}^{t_{k+1}} f(x(t), u(t)) dt$. These constraints are applied at each collocation point of the system. The collocation points are chosen at the midpoints (in the time-axis) between each breakpoint. 
+Of course, the dynamics of the system must be encoded somewhere in the optimization. By choosing the collocation points at the midpoints (in the time-axis) between each breakpoint, the equations for cubic splines and first-order holds lend to these equations: 
 
 <center><img src="Media/collocation.png" style="width:45%"/></center><br />
 
-where each $t(k)$ is a breakpoint time, and $h$ is the time step. Euler integration is used to apply the dynamics from $x(t_k)$ (sample point) to $x(t_{c,k})$ (collocation point). 
+which ultimately lends to this constraint (enforcing dynamics at each collocation point given the state and control input at each breakpoint):
 
-Overall, the optimization is expressed like so:
+$$ \dot{x}(t_{c,k}) = f(x(t_{c,k}), u(t_{c,k})) \quad \forall k \in [0, N-1]$$
 
+where each $t(k)$ is a breakpoint time, $h$ is the time step, and $t_{c,k}$ is a collocation point time. 
+
+In general, the optimization is expressed like so:
 
 $$ \begin{align*}
-    \min_{x[\cdot], u[\cdot]} \quad & l_f(x[N]) + \sum_{n=0}^{N-1} \Delta t * l(x[n], u[n]) \\
+    \min_{\forall k. ~x[t_k], u[t_k]} \quad & l_f(x[N]) + \sum_{n=0}^{N-1} \Delta t * l(x[n], u[n]) \\
     \text{subject to} \quad & \dot{x}(t_{c,n}) = f(x(t_{c,n}), u(t_{c,n})), & \forall n \in [0, N-1] \\
     & x[0] = x_0 \\
-    & \text{other linear constraints...}
+    & \text{other constraints...}
 \end{align*} $$
 
-(Sidenote: we're also multiplying $\Delta t$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost.)
+(Sidenote: we're also multiplying $\Delta t$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost. However, you could use a more advanced integration method to calculate the cost than a simple Euler integration).
 
 Most solvers will also allow you to apply an initial guess for $x[\cdot], u[\cdot]$.
+
+Note that, again, $N$ (the number of piecewise polynomial functions used to parameterize the trajectory), along with $\Delta t$, the time interval for each piecewise polynomial function, must be user-defined.
+
 
 
 ## Trajectory Stabilization
