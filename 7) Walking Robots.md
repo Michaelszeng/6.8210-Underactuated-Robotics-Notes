@@ -80,7 +80,15 @@ $$ \begin{align*} \text{find}_{x(\cdot), T} \quad s.t. \quad \dot{x} &= f(x) \\ 
 The last constraint covers the energy loss from contact.
 
 
+## Floating Base Coordinates
 
+Add a fictitious 6-DoF (or 3-DoF for planar robots) "floating-base" joint connecting some part of the robot to the world. Derive the equations of motion for the floating-base robot one wthout contact, and add contact forces separately:
+
+
+<center><img src="Media/floating_base_manipulator_eq.png" style="width:40%"/></center><br />
+
+
+where $\lambda_i$ are the constraint forces and $\mathbf{J_i}(\mathbf{q})$ are the constraint Jacobians. If we use signed distance from contact as our guard function $\phi_i(\mathbf{q})$, then $\mathbf{J_i}(\mathbf{q}) = \frac{\delta \phi_i}{\delta \mathbf{q}}$
 
 
 
