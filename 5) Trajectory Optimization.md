@@ -384,3 +384,46 @@ The primary advantage is for nonlinear systems; for any of the other methods des
 ### DDP (Differential Dynamics Programming)
 
 Very similar to iLQR, except, instead of taking a linear approximation of the system dynamics, you take a quadratic approximation. Of course, this will have a slight impact on the math in the backward pass.
+
+
+
+## Differential Flatness
+
+Main idea: for special cases of underactuated systems (let's say our underactuated system has $m$ inputs), it may be possible to define $m$ "differentially flat" outputs, such that a trajectory in the differentially flat outputs fully defines all degrees of freedom and control inputs for the system. **This can make trajectory optimization a convex problem even for a system with nonlinear dynamics.**
+
+For example, a 2D quadrotor with 2 inputs and 3 outputs, with dynamics:
+
+<center><img src="Media/planar_quadrotor_eom.png" style="width:28%"/></center><br />
+
+is differentially flat in the $x, y$ coordinate space. Any $\ddot{x}, \ddot{y}$ trajectory fully defines the $\theta$ trajectory ($\dot{\theta}$ and $\ddot{\theta}$ trajectories, if you differentiate the below equation once or twice):
+
+<center><img src="Media/2d_quadrotor_differential_flatness.png" style="width:35%"/></center><br />
+
+And, it's simple enough to show that $u_1$ and $u_2$ can be expressed only in terms of $x$ and $y$ (and constants).
+
+This means, to solve a trajectory for the 2D quadrotor, you simply optimize a trajectory in $x$ and $y$, and this will fully define $\theta$ and $u$. Note that the $x$, $y$ trajectory must be four-times differentiable (since $\ddot{\theta}$ will be expressed in terms of the fourth derivative of $x$ and $y$). 
+
+The way this trajectory optimization is often formulated is by parameterizing $x$, $y$ as high-order piecewise polynomials, and solving the coefficients using a QP. The key point is that this optimization does not have nonlinear constraints from the system dynamics; any 4x dfferentiable trajectory in the differentially flat coordinates $x,y$ is feasible for the system (given no input/torque limits). This optimization is convex.
+
+The differentially flat coordinates implicitely encode the system dynamics by expressing $\theta$ and $u$ using the differentially flat coordinates and the dynamics equations.
+
+<br />
+
+Of course, there are limitations to differential flatness. In the case of the quadrotor, it's difficult then to optimize a trajectory that controls all of $x,y,$ and $\theta$.
+
+In addition, differential flatness is a very specific property of the dynamics that most underactuated systems do not have. The strict requirement on an underactuated system to be differentially flat is that it is possible to design some differentially flat output coordinates:
+
+<center><img src="Media/differential_flatness_output_coordinates.png" style="width:28%"/></center><br />
+
+where we can write $\mathbf{x}$ and $\mathbf{u}$ in terms of the output and its time derivatives:
+
+
+<center><img src="Media/differential_flatness_requirement.png" style="width:25%"/></center><br />
+
+
+In general, determining whether a system can be differentially flat in some coordinate space is not a straightforward or systematic procedure; you fumble the algebra until it works (or just know this is a trait of some systems like quadrotors).
+
+Lastly, torque limits on the system are likely to break the convexity of the trajectory optmization; for example, if you were to express $u_1$ and $u_2$ of the drone in terms of $x$ and $y$, you would find they are nonlinear in terms of $x$ and $y$; so adding an inequality constraint on $u_1$ and $u_2$ would introduce a nonconvex inequality constraint to the trajectory optimization. There are ways to get around this--namely, you can define a convex subset of the space bounded by the nonlinear constraints. For example, if the red region represents the nonconvex bounds of the input limits, then we can instead add stricter convex constraints like the blue region that maintain convexity of the optimization while still ensuring we respect the input limits.
+
+
+<center><img src="Media/differential_flatness_input_constriants.jpg" style="width:45%"/></center><br />
