@@ -310,15 +310,14 @@ We'll need to expand out $\delta \mathbf{x}[n+1]$ in terms of $\mathbf{x}$ and $
 $$
 \begin{aligned}
 \delta \mathbf{x}[n+1] & = \mathbf{x}[n+1] - \bar{\mathbf{x}}[n+1] \\
-& = \mathbf{f}_n + \begin{bmatrix} \mathbf{f}_{\mathbf{x},n} & \mathbf{f}_{\mathbf{u},n} \end{bmatrix} 
+& = \mathbf{f}(\bar{\mathbf{x}}[n], \bar{\mathbf{u}}[n]) + \begin{bmatrix} \mathbf{f}_{\mathbf{x},n} & \mathbf{f}_{\mathbf{u},n} \end{bmatrix} 
 \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} - \bar{\mathbf{x}}[n+1] \\
-& = \mathbf{f}_n + \begin{bmatrix} \mathbf{f}_{\mathbf{x},n} & \mathbf{f}_{\mathbf{u},n} \end{bmatrix} 
+& = \mathbf{f}(\bar{\mathbf{x}}[n], \bar{\mathbf{u}}[n]) + \begin{bmatrix} \mathbf{f}_{\mathbf{x},n} & \mathbf{f}_{\mathbf{u},n} \end{bmatrix} 
 \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} - \mathbf{f}(\bar{\mathbf{x}}[n], \bar{\mathbf{u}}[n]) \\
 & = \begin{bmatrix} \mathbf{f}_{\mathbf{x},n} & \mathbf{f}_{\mathbf{u},n} \end{bmatrix} 
 \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix}.
 \end{aligned}
 $$
-
 
 Plugging in the value for $\delta \mathbf{x}[n+1]$ into the expanded Bellman equation:
 
@@ -358,6 +357,14 @@ $$
 Finally, we solve for $V_{x,n}$ and $V_{xx,}$, since these will be used in the next iteration of the backward pass. The idea here is simple: realize that $V(x[n]) = Q(x[n],u[n]^*)$ by definition. Then, we can simply plug in $\delta \mathbf{u}[n]^*$ into the equation for the Q-function, then equate this to the V-function, and express $V_{x,n}$ and $V_{xx,}$ in terms of the partials of $Q$. In detail:
 
 <center><img src="Media/ilqr_solving_for_v_function_partials.jpg" style="width:100%"/></center><br />
+
+That is all that's needed to compute the optimal control input $\delta u^*[n]$, but it is also useful to compute an expected cost reduction during each iteration of the backward pass in order to have a condition for termination (when the expected cost reduction is too low). This computation is simple; we compute the value of the Q-function with the nominal trajectory, and compare it to the value of the Q-function if we apply $\delta u^*[n]$ to that nominal trajectory:
+
+<center><img src="Media/ilqr_expected_cost_reduction.jpg" style="width:52%"/></center><br />
+
+
+Note: regularization is also typically also included to ensure $Q_{uu}$ is positive definite (and invertible). See [https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/10-Trajectory-Optimization-Duplicate-604fbbf9-5cbe-438f-ab43-250212f50cd7/notebook/ilqr_driving-6003b030a7da40b2ab690aa54e6242d9] for an example.
+
 
 2. Forward Pass: Now that the backward pass has solved $\delta \mathbf{u}[n]^*$, the forward pass applies $\delta \mathbf{u}[n]^*$ to the original (nonlinear) system dynamics for each time step in the trajectory, while keeping track of running total cost. (This is as simple as it sounds). This will result in a new, likely different $\mathbf{x}[n], \mathbf{u}[n]$ than the nominal trajectory. 
 
