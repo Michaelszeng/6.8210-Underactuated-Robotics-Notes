@@ -272,6 +272,7 @@ You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are
 3. Cost-to-go from LQR as Lyapunov function (cost-to-go strictly decreases each time step)
 4. Find largest $\rho(t)$
 
+<br /><br />
 
 ## iLQR (Iterative LQR)
 
@@ -329,11 +330,13 @@ $$ \begin{aligned} Q(\mathbf{x}[n], \mathbf{u}[n]) & \approx \ell_n + \begin{bma
 
 Finally, to get values of $Q_{\mathbf{x},n}, Q_{\mathbf{u},n}, Q_{\mathbf{xx},n}, Q_{\mathbf{ux},n},$ and $Q_{\mathbf{uu},n}$, we compare coefficients of each term on the left and right side of the equation. In the end, we get:
 
-$$ Q_{\mathbf{x},n} = \ell_\mathbf{x}^T + V_\mathbf{x}^T \mathbf{f}_\mathbf{x} \\
-Q_{\mathbf{u},n} = \ell_\mathbf{u}^T + V_\mathbf{x}^T \mathbf{f}_\mathbf{u} \\
-Q_{\mathbf{xx},n} = \ell_\mathbf{xx}^T + \mathbf{f}_\mathbf{x}^T V_\mathbf{xx} \mathbf{f}_\mathbf{x} \\
-Q_{\mathbf{ux},n} = \ell_\mathbf{ux}^T + \mathbf{f}_\mathbf{u}^T V_\mathbf{xx} \mathbf{f}_\mathbf{x} \\
-Q_{\mathbf{uu},n} = \ell_\mathbf{uu}^T + \mathbf{f}_\mathbf{u}^T V_\mathbf{xx} \mathbf{f}_\mathbf{u} $$
+$$ \begin{align*} 
+Q_{\mathbf{x},n} &= \ell_\mathbf{x}^T + V_{\mathbf{x},n+1}^T \mathbf{f}_\mathbf{x} \\
+Q_{\mathbf{u},n} &= \ell_\mathbf{u}^T + V_{\mathbf{x},n+1}^T \mathbf{f}_\mathbf{u} \\
+Q_{\mathbf{xx},n} &= \ell_\mathbf{xx}^T + \mathbf{f}_\mathbf{x}^T V_{\mathbf{xx},n+1} \mathbf{f}_\mathbf{x} \\
+Q_{\mathbf{ux},n} &= \ell_\mathbf{ux}^T + \mathbf{f}_\mathbf{u}^T V_{\mathbf{xx},n+1} \mathbf{f}_\mathbf{x} \\
+Q_{\mathbf{uu},n} &= \ell_\mathbf{uu}^T + \mathbf{f}_\mathbf{u}^T V_{\mathbf{xx},n+1} \mathbf{f}_\mathbf{u}
+\end{align*}$$
 
 Now, we can solve for $\arg\!\min_{\delta \mathbf{u}[n]}$ by taking the derivative of the Q-function (notice that the Q-funtion is quadratic) and setting it to 0:
 
@@ -358,13 +361,12 @@ Finally, we solve for $V_{x,n}$ and $V_{xx,}$, since these will be used in the n
 
 <center><img src="Media/ilqr_solving_for_v_function_partials.jpg" style="width:100%"/></center><br />
 
-That is all that's needed to compute the optimal control input $\delta u^*[n]$, but it is also useful to compute an expected cost reduction during each iteration of the backward pass in order to have a condition for termination (when the expected cost reduction is too low). This computation is simple; we compute the value of the Q-function with the nominal trajectory, and compare it to the value of the Q-function if we apply $\delta u^*[n]$ to that nominal trajectory:
+That is all that's needed to compute the optimal control input $\delta \mathbf{u}^*[n]$, but it is also useful to compute an expected cost reduction during each iteration of the backward pass in order to have a condition for termination (when the expected cost reduction is too low). This computation is simple; we compute the value of the Q-function with the nominal trajectory, and compare it to the value of the Q-function if we apply $\delta \mathbf{u}^*[n]$ to that nominal trajectory:
 
 <center><img src="Media/ilqr_expected_cost_reduction.jpg" style="width:52%"/></center><br />
 
 
 Note: regularization is also typically also included to ensure $Q_{uu}$ is positive definite (and invertible). See [https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/10-Trajectory-Optimization-Duplicate-604fbbf9-5cbe-438f-ab43-250212f50cd7/notebook/ilqr_driving-6003b030a7da40b2ab690aa54e6242d9] for an example.
-
 
 2. Forward Pass: Now that the backward pass has solved $\delta \mathbf{u}[n]^*$, the forward pass applies $\delta \mathbf{u}[n]^*$ to the original (nonlinear) system dynamics for each time step in the trajectory, while keeping track of running total cost. (This is as simple as it sounds). This will result in a new, likely different $\mathbf{x}[n], \mathbf{u}[n]$ than the nominal trajectory. 
 
@@ -390,9 +392,12 @@ The primary advantage is for nonlinear systems; for any of the other methods des
 
 ### DDP (Differential Dynamics Programming)
 
-Very similar to iLQR, except, instead of taking a linear approximation of the system dynamics, you take a quadratic approximation. Of course, this will have a slight impact on the math in the backward pass.
+Very similar to iLQR, except, instead of taking a linear approximation of the system dynamics, you take a quadratic approximation. The resulting equations are seen in [https://andylee024.github.io/blog/2018/10/10/ddp/]. In short, the computations for the partials of $Q$ are somewhat different, but the general principle of the derivation remains the same. The one thing to note is that, because we take a 2nd order approximation of the dynamics, there will be 3rd and 4th order terms when expanding the approximation of $Q(\mathbf{x}[n], \mathbf{u}[n])$. Typically, these are simply ignored/truncated since there is no algebraically clean way to deal with them.
+
+Why use DDP over iLQR? The idea is DDP should produce a *marginally* better trajectory bc of its more accurate approximation of dynamics. This may result in faster convergence? Experiments in progress. Of course, DDP is more computationally expensive (must compute Hessians of the dynamics). Russ Tedrake is of the opinion that there is rarely a case for DDP over iLQR.
 
 
+<br /><br />
 
 ## Differential Flatness
 
