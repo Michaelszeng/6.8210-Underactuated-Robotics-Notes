@@ -61,6 +61,66 @@ Also cause underactuation. i.e. cars can't move sideways $\rightarrow$ doesn't r
 <br />
 <br />
 
+# Standard Form Dynamics
+
+We denote $\mathbf{x}$ as the state vector. $\mathbf{x}$ contains all the positions of the system along with their derivatives (velocities). For example, the state of a 2D quadrotor contains $x, y, \theta, \dot{x}, \dot{y}, \dot{\theta}$.
+
+The standard form dynamics look like (where $\mathbf{u}$ is the control input vector):
+
+$$\dot{\mathbf{x}} = f(\mathbf{x}, \mathbf{u})$$
+
+This form is very useful because it makes integrating/rolling out the dynamics very easy; in the discrete case, we get that $\mathbf{x}_{k+1} = \dot{\mathbf{x}}_{k}*dt + \mathbf{x}_{k}$. It's a very intuitive form; you get the acceleration of the system based on its current position/velocity and control.
+
+We often intuitively understand the dynamics of a system with a set of equations like this (these are the dynamics of a 2D quadrotor):
+
+<center><img src="Media/2D_quadrotor_dynamics.png" style="width:30%"/></center><br />
+
+We must then convert these dynamics equations to the standard form.
+
+In the 2D quadrotor case, we have:
+
+$$\mathbf{x} = \begin{bmatrix}
+x \\
+y \\
+\theta \\
+\dot{x} \\
+\dot{y} \\
+\dot{\theta}
+\end{bmatrix}, \quad
+\mathbf{u} = \begin{bmatrix}
+u_1 \\
+u_2
+\end{bmatrix}
+$$
+
+$$
+\dot{\mathbf{x}} = \begin{bmatrix}
+\dot{x} \\
+\dot{y} \\
+\dot{\theta} \\
+\ddot{x} \\
+\ddot{y} \\
+\ddot{\theta}
+\end{bmatrix} = 
+\begin{bmatrix}
+\dot{x} \\
+\dot{y} \\
+\dot{\theta} \\
+-\frac{u_1 + u_2}{m} \text{sin} \theta \\
+\frac{u_1 + u_2}{m} \text{cos} \theta - g \\
+\frac{r}{I}(u_1- u_2)
+\end{bmatrix}
+$$
+
+In matrix form ($\dot{\mathbf{x}} = A(x) \mathbf{x} + B(x) \mathbf{u}$):
+
+<center><img src="Media/2D_quadrotor_dynamics_standard_form.png" style="width:75%"/></center><br />
+
+
+
+<br />
+<br />
+
 # Dynamics (using a Pendulum as example)
 
 ### Background: Phase Portraits

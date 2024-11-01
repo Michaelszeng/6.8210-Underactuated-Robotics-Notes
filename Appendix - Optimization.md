@@ -38,17 +38,29 @@ $$\min_{x, u, s_x, s_u} \sum_n^{N-1} s_x[n] + s_u[n] ~~~~s.t.~~~s_x[n] \geq x[n]
 
 When constraints touch only a small number of decision variablese each, this can be exploited by some solvers for faster solves.
 
-### SNOPT 
+### SQP 
 
 Sequential Quadratic Programming (SQP): Repeatedly takes local quadratic approximations of optimization landscape (by taking gradients at multiple points), linear approximations of the constraints, then solves QP, the repeats. Similar to gradient descent (but is 2nd order) (so it converges faster and gracefully handles constraints).
 
-### SDP Feasibility Problems (and what to set the Cost as)
+### SDPs and SDP Feasibility Problems (and what to set the Cost as)
+
+General form of an SDP (a convex problem):
+
+$$
+\begin{align*}
+\min_{X} & \quad f(X) \quad \text{(linear cost function)} \\
+\text{subject to} & \quad \text{linear constraints on } X \\
+& \quad X \succeq 0
+\end{align*}
+$$
+
+Essentially, they are glorified linear programs that operate on matrices and can accept constraints on the "PSD-ness" of $X$, or any linear function of $X$.
 
 Often, the goal of SDP problems is to find any feasible solution. Even so, it is best to add some cost function to give a more numerically-controlled answer.
 
-A frequent choice is $ \min tr(P) $. Why:
+A frequent choice is $ \min tr(P) $ (where $P$ is the decision variable). Why:
  - $tr(P) = $ sum of eigenvalues of $P$. The definition of a PSD matrix is non-negative eigenvalues--so we're asking for the matrix to be PSD but not to be too extreme.
- - $P$ won't just go to 0 in practice since we actually write the PSD constraint to be something like $P - \epsilon \succeq 0; so $P$ will be at least $\epsilon$
+ - $P$ won't just go to 0 in practice since we actually write the PSD constraint to be something like $P - \epsilon \succeq 0$; so $P$ will be at least $\epsilon$
  - Minimizing trace can also produce sparser matrices.
 
 ### Non-collision Constraints
