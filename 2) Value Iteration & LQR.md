@@ -1,4 +1,4 @@
-# Dynamic Programming (DP) (aka Value Iteration)
+# Dynamic Programming (DP) (aka Value Iteration, aka MDPs)
 
 
 ## Discreet Time DP
@@ -23,13 +23,13 @@ $$ \forall i ~J^*(s_i) = \min_{a \in A} \left[ \ell(s_i, a) + J^*(f(s_i, a)) \ri
 
 where $\ell(s_i, a)$ is the cost for state action pair $s_i, a$.
 
-We call this the "cost-to-go" function--it describes the cost of each action at the current state, and therefore allows you to find the best action. $J^*(s_i)$ is the optimal cost-to-go, which is the minimum possible cost incurred from taking an action at state $s_i$.
+We call $J(s_i)$ the "cost-to-go" function--it describes the cost of each action at the current state, and therefore allows you to find the best action. $J^*(s_i)$ is the optimal cost-to-go, which is the minimum possible cost incurred from taking an action at state $s_i$.
 
 Basically, the cost at the current state is equal to the minimum cost at the next state plus the cost to transition from current to next.
 
 ### The "Value Iteration" Version.
 
-From here, we'll switch away from DP to "value iteration". The concept is very similar, except, for value iteration, we don't typically solve for a specific $s_0$; we allow the recursion to continue until $J^*(s)$ converges (stops updating) for all $s$; the the real cost of each possible state has been globally computed.
+From here, we'll switch away from DP to "value iteration". The concept is very similar, except, for value iteration, we don't typically solve for a specific $s_0$; we allow the recursion to continue until $J^*(s)$ converges (stops updating) for all $s$; the real cost of each possible state has been globally computed.
 
 This is different than the DP formulation, where there is a clear order of recursion from $s_0$ to $s_{goal}$; but value iteration simply updates all states (from $s_{goal}$) until "convergence" -- when further value iteration updates no longer change $J^*$.
 
@@ -92,7 +92,7 @@ Now, we are able to find the optimal $u^*$ for any given cost function and state
 
 
 #### General Case
-What happens if the cost function is not quadratic or the dynamics are not control affine? Then you can't solve for $u$ by just setting the gradient of HJB to 0. One workout is, every iteration of the algorithm, you could take a positive-definite quadratic approximation in $u$ of the HJB and then solve for $u^*$. Alternatively, use numerical optimization methods like gradient descent to solve for $u$.
+What happens if the cost function is not quadratic or the dynamics are not control affine? Then you can't solve for $u$ by just setting the gradient of HJB to 0. One workaround is, every iteration of the algorithm, you could take a positive-definite quadratic approximation in $u$ of the HJB and then solve for $u^*$. Alternatively, use numerical optimization methods like gradient descent to solve for $u$.
 
 
 ### Example: HJB on Cart Mass System (Double Integrator)

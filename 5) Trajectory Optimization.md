@@ -155,6 +155,29 @@ Note that, again, $N$ (the number of piecewise polynomial functions used to para
 
 
 
+### Kinematic Trajectory Optimization
+
+This is a somewhat different view on traj opt compared to transcription, shooting, collocation methods. This is less concerned about encoding/following strict dynamic constraints, and more concerned about kinematic feasibility (i.e. smooth trajectories in configuration space and respecting velocity/acceleration/higher-order derivative limits). It's strategy is to solve a smooth path in robot configuration space, and it assumes that such a path will be dynamically feasible (THIS ASSUMPTION IS NOT ALWAYS VALID. See last paragraph of this section). It is also formulated as an optimization problem.
+
+We parameterize a trajectory in configuration space using something like a B-spline with some pre-set number of control points (B-splines have nice properties -- the entire traj remains within the convex hull of the control points, and derivatives (w.r.t. time) of B-splines are still B-splines, so enforcing derivative constraints at the control points also enforces the derivative constraints along the entire trajectory). These control points are the decision variables of the optimization. A simple cost can be something like the length of the B-spline. Constraints are then all applied to the B-spline. For example, velocity, acceleration, jerk limits are applied as linear constraints on the control points of the 1st, 2nd, and 3rd derivative of the B-spline (derivatives of B-splins are still just linear combinations of the control points). Obstacle avoidance can be achieved by adding minimum-distance constraints at discrete samples along the B-spline (though this would obviously be non-convex in general).
+
+To parameterize time within the trajectory, we add scalar $T$, the duration of the trajectory, as a additional decision variable. B-splines are actually functions of not only the control points, but also the knot vector (which is usually just fixed beforehand for simplicity/numerical feasibility) and a time parameter $u$. The knot vector is a vector of weakly increasing values describing the time intervals at which each control point is "active"/influencing the spline. $u$, which ranges from 0 to 1, "traces" along the spline. The equation for a B-spline is:
+
+$$ x(u) = \sum_{i=0}^n N_{i,p}(u) \mathbf{P}_i $$
+
+ - $x(u)$ is the point on the curve at parameter $u$.
+ - $\mathbf{P}_i$ are the control points.
+ - $N_{i,p}(u)$ are the B-spline basis functions of degree $p$, which depend on the knot vector and $u$.
+
+$T$ is then used as a time-rescalar, where, previously, $u \in [0,1]$, now, $u \in [0,T]$. Note that the velocity, acceleration, and higher-order derivative constraints all do need to be scaled by $T$ as well, leading to non-linearity for acceleration and higher-order derivatives, though velocity constraints are still linear ([source](https://chatgpt.com/share/6771a0a2-bde0-8009-8056-a5d603fa77bb)).
+
+Note that, even though the optimization only optimizes the control points and full trajectory duration $T$, it still has some control over the timing of the whole trajectory. For example, if acceleration constraints are not being satisfied, the optimization may increase $T$ to slow the entire trajectory down or move control points around to give more space to accelerate up to speed.
+
+There's one major flaw to Kinematic traj opt, and there's a reason it's not covered in *"Underactuated"* Robotics. It assumes a smooth path in robot configuration space is dynamically feasible, but this isn't always true; for example, underactuated systems might not have the control authority to follow an arbitrary trajectory through configuration space. Additionally, constraints that are highly correlated to the robot's dynamics (i.e. torque limits, which care about inertias, gravity, coriolis force) aren't able to be expressed easily.
+
+In general, kinematic trajectory optimization is good for fully-actuated, powerful robots where pure power can basically override the robot's dynamics.
+
+
 ## Trajectory Stabilization
 
 The basic problem with direct transcription/shooting/collocation is that they solve for the trajectory given the initial state... and that is all. They don't use any feedback to ensure the robot actually follows that trajectory in real life.
