@@ -102,7 +102,7 @@ Usually, numerically infeasible (requires explicitely computing $A^n$, which usu
 
 Also, puts a huge weight on $u[0]$ compared to $u[N]$ ($u[0]$ is multiplied by $A$ to a much higher power), which makes the optimization numerically difficult. While this is true in real life (your first action matters more), this is better distributed in the constraints in Direct Transcription, where the solver can enforce constraints in both directions (i.e. modify an earlier action to fit within a constraint relative to a later action).
 
-In addition, if you do have many constraints on $x$ (i.e. $x[n] \leq 2 ~\forall ~n$), each constraint requires an instance of $A^nx[0] + \sum_{k=0}^{n-1} A^{n-1-k}Bu[k]$, so the efficiency is quickly lost. It's more natural to simply have $x[\cdot]$ as decision variables in practice.
+<!-- In addition, if you do have many constraints on $x$, each constraint requires an instance of $A_i^nx[0] + \sum_{k=0}^{n-1} A_i^{n-1-k}B_iu[k]$, so the efficiency is quickly lost. It's more natural to simply have $x[\cdot]$ as decision variables in practice. -->
 
 Also, the "sparsity" of the constraints (each constraint touches a small number of decision variables) in Direct Transcription makes it not too bad to solve. 
 
@@ -157,11 +157,11 @@ Note that, again, $N$ (the number of piecewise polynomial functions used to para
 
 ### Kinematic Trajectory Optimization
 
-This is a somewhat different view on traj opt compared to transcription, shooting, collocation methods. This is less concerned about encoding/following strict dynamic constraints, and more concerned about kinematic feasibility (i.e. smooth trajectories in configuration space and respecting velocity/acceleration/higher-order derivative limits). It's strategy is to solve a smooth path in robot configuration space, and it assumes that such a path will be dynamically feasible (THIS ASSUMPTION IS NOT ALWAYS VALID. See last paragraph of this section). It is also formulated as an optimization problem.
+This is a somewhat different view on traj opt compared to transcription, shooting, collocation methods. This is less concerned about encoding dynamic constraints, and more concerned about kinematic feasibility (i.e. smoothness and respecting velocity/acceleration/higher-order derivative limits). It's strategy is to solve a smooth path in robot configuration space, and it assumes that such a path will be dynamically feasible (THIS ASSUMPTION IS NOT ALWAYS VALID. See last paragraph of this section). It is also formulated as an optimization problem.
 
 We parameterize a trajectory in configuration space using something like a B-spline with some pre-set number of control points (B-splines have nice properties -- the entire traj remains within the convex hull of the control points, and derivatives (w.r.t. time) of B-splines are still B-splines, so enforcing derivative constraints at the control points also enforces the derivative constraints along the entire trajectory). These control points are the decision variables of the optimization. A simple cost can be something like the length of the B-spline. Constraints are then all applied to the B-spline. For example, velocity, acceleration, jerk limits are applied as linear constraints on the control points of the 1st, 2nd, and 3rd derivative of the B-spline (derivatives of B-splins are still just linear combinations of the control points). Obstacle avoidance can be achieved by adding minimum-distance constraints at discrete samples along the B-spline (though this would obviously be non-convex in general).
 
-To parameterize time within the trajectory, we add scalar $T$, the duration of the trajectory, as a additional decision variable. B-splines are actually functions of not only the control points, but also the knot vector (which is usually just fixed beforehand for simplicity/numerical feasibility) and a time parameter $u$. The knot vector is a vector of weakly increasing values describing the time intervals at which each control point is "active"/influencing the spline. $u$, which ranges from 0 to 1, "traces" along the spline. The equation for a B-spline is:
+To parameterize time within the trajectory, we add scalar $T$, the duration of the trajectory, as a additional decision variable (you can also imagine having a simple linear time-cost with $T$). B-splines are actually functions of not only the control points, but also the knot vector (which is usually just fixed beforehand for simplicity/numerical feasibility) and a time parameter $u$. The knot vector is a vector of weakly increasing values describing the time intervals at which each control point is "active"/influencing the spline. $u$, which ranges from 0 to 1, "traces" along the spline. The equation for a B-spline is:
 
 $$ x(u) = \sum_{i=0}^n N_{i,p}(u) \mathbf{P}_i $$
 
@@ -175,7 +175,7 @@ Note that, even though the optimization only optimizes the control points and fu
 
 There's one major flaw to Kinematic traj opt, and there's a reason it's not covered in *"Underactuated"* Robotics. It assumes a smooth path in robot configuration space is dynamically feasible, but this isn't always true; for example, underactuated systems might not have the control authority to follow an arbitrary trajectory through configuration space. Additionally, constraints that are highly correlated to the robot's dynamics (i.e. torque limits, which care about inertias, gravity, coriolis force) aren't able to be expressed easily.
 
-In general, kinematic trajectory optimization is good for fully-actuated, powerful robots where pure power can basically override the robot's dynamics.
+In general, kinematic trajectory optimization is good for fully-actuated, powerful robots where pure power can basically override the robot's dynamics, i.e. robot arms.
 
 
 ## Trajectory Stabilization
@@ -281,9 +281,9 @@ Recursive feasibility is an important notion: if a feasible solution is found in
 
 Same principle as MPC, but perform a linearization of the system around the current state at each time step, then perform linear optimal control (general MPC might just do a nonlinear optimization), i.e. with direct transcription or direct shooting. The reason for this is that convex optimization can give you guarantees of optimality and feasibility that non-convex optimization cannot.
 
-This is also very similar to Local LQR, except we don't restrict ourselves to an LQR cost and optimization, so Linear MPC can still solve optimizations with other linear constraints. 
+This is also very similar to Local LQR, except we don't restrict ourselves to an LQR cost and optimization, so Linear MPC can still solve optimizations with other linear constraints (i.e. control input limits). 
 
-The downside to Linear MPC compared to Local LQR is 
+The downside to Linear MPC compared to Local LQR is computation -- if your cost is quadratic, you must solve a generic QP instead of an LQR problem (which has an analytical soln.).
 
 You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are far from the linear constraints, and switching to MPC otherwise. Local LQR is more computationally efficient, and Local LQR is more tractable for analysis (i.e. SOS optimization for verifying regions of attraction).
 

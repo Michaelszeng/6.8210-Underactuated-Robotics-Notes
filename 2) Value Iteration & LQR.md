@@ -292,12 +292,79 @@ However, we still need to find the optimal $S$. We can plug $u^*$ back into HJB:
 
 $$ 0 = x^T[Q-SBR^{-1}B^TS + 2SA]x $$
 
-This must hold for all $x$, so we can sort of "divide" $x$ out. Then $Q-SBR^{-1}B^TS + 2SA = 0$, and we must solve for $S$. This is complicated; in practice, your numerical toolbox (i.e. drake, matlab) will have a function that will return $S$ and $K$ given $Q,R,A,B$.
+And have your numerical toolbox solve this equation for $S$.
 
 LQR works for a variety of systems; even systems without linear dynamics or quadratic cost, you can take linear/quadratic approximations and still get good control.
 
-If, for example,you want to stabilize to a fixed point other than $x=0$, you can also perform a change of variables such that you are stabilizing the new varible to $0$.
+If, for example,you want to stabilize to a fixed point other than $x=0$, you can also perform a change of variables into "error" coordinated so that you are stabilizing the new "error" varible to $0$.
+
+### Discrete Time, Finite Horizon Case
+
+This definition of $S$ and $K$ only holds in the infinite horizon LQR case; in discrete-time, finite horizon LQR, which might be more common in a practical implementation of MPC, $S$ becomes a function of time. $S_t$ is calculated recursively using the Ricatti recurrence, from $t=T$ to $t=1$:
+
+$$S_t = Q + A^\top S_{t+1} A - A^\top S_{t+1} B (R + B^\top S_{t+1} B)^{-1} B^\top S_{t+1} A,
+$$
+
+The base case, $S_T$, is computed explicitely; often using $S_T = x_T^\top Q x_T$ to penalize any terminal state error (assuming no more control input at termination).
+
+The control policy also differs:
+
+$$K_t = \left(R + B^\top S_{t+1} B\right)^{-1} B^\top S_{t+1} A. $$
+
+The derivation for $S_t$ and $K_t$ is simpler in the discrete time-case; if you simply solve the analytical solution of $\min_{u_t} [l(x_t, u_t) + J^*(f(x_t, u_t))]$, you get the recursive equations for $K_t$ and $S_t$ seen above. This minimization ($\min_{u_t} [l(x_t, u_t) + J^*(f(x_t, u_t))]$), although entirely intuitive, is named the  "Discrete-Time Bellman Equation", and is considred the discrete-time analog of HJB.
+
+### Batch Solution (for Discrete Time, Finite Horizon Case)
+
+Usually, for the most computationally efficient real-time LQR control, using the optimal control policy is what you want. But, there is a different numerical method to solve for the whole optimal control trajectory in batch that may be desirable in certain cases; for example, if your system has other linear constraints, they can easily be added and this batch minimization can be solved efficiently as a QP instead of taking the analytiical minimum of the quadratic cost. Or, if your goal is more-so trajectory optimization than control (i.e. you only want to know $u_t^*$ for your given $x_{\text{init}}$ and you do not care about a general control policy), this method is more efficiently computes a single trajectory.
+
+The core idea of this method is to use forward simulation to get rid of the $x$ decision variables and to batch everything into large matrices for efficient computation:
+
+$$
+\begin{aligned}
+X &:= \underbrace{\begin{bmatrix} x_1 \\ x_2 \\ \vdots \\ x_T
+\end{bmatrix}}_{X}
+= \underbrace{\begin{bmatrix}
+I \\ A \\ \vdots \\ A^{T-1}
+\end{bmatrix}}_{\tilde{A}}
+x_\text{init} + 
+\underbrace{\begin{bmatrix}
+0 & \cdots & \cdots & 0 \\ 
+B & 0 & \cdots & 0 \\ 
+AB & B & \cdots & 0 \\ 
+\vdots & \ddots & \ddots & \vdots \\ 
+A^{T-2}B & AB & \cdots & B
+\end{bmatrix}}_{\tilde{B}}
+\underbrace{\begin{bmatrix} u_1 \\ u_2 \\ \vdots \\ u_{T-1}
+\end{bmatrix}}_{U}
+\end{aligned}
+$$
+
+(Note: Computing $\tilde{B}$ does require calculating high powers of $A$ (i.e. $A^{T-2}$), which can cause similar numerical problems as exist for direct shooting. Typically, this is manageable for LQR though because of the fewer time steps and because LQR only has 1 constraint (the dynamics)).
+
+We also stack the cost matrices:
+
+$$\tilde{Q} := \text{blockdiag}(Q, \dots, Q) \\ 
+\tilde{R} := \text{blockdiag}(R, \dots, R)$$
+
+And we can re-express the LQR optimization over states and control inputs as an unconstrained optimization over just the control inputs:
+
+$$ \min_{X, U} J(X, U) := X^\top \tilde{Q} X + U^\top \tilde{R} U$$
+$$X := \tilde{A} x_{\text{init}} + \tilde{B} U$$
+$$\min_{U} \tilde{J}(U; x_{\text{init}}) := U^\top H U + 2 x_{\text{init}}^\top F U + C$$
+$$\text{where} \quad H := \tilde{B}^\top \tilde{Q} \tilde{B} + \tilde{R}, \quad$$
+$$F := \tilde{A}^\top \tilde{Q} \tilde{B}, \quad$$
+$$C := x_{\text{init}}^\top \tilde{A}^\top \tilde{Q} \tilde{A} x_{\text{init}}$$
+
+The resulting minimization is quadratic in $U$ and can be solved analytically by setting the gradient to 0:
+
+$$
+\partial_U \tilde{J}(U^*; x_{\text{init}}) \triangleq 2HU^* + 2F^\top x_{\text{init}} = 0 \\
+\implies U^* = -H^{-1}F^\top x_{\text{init}}
+$$
+
+Though in practice, instead of inverting $H$, which is very large ($mT \times mT ~| ~m :=$ number of control inputs), we solve the linear system $2HU^* + 2F^\top x_{\text{init}} = 0$ using a Cholesky Factorization or similar. If $B$, $Q$, and $R$ are fixed, $H^{-1}$ can also be pre-computed.
+
 
 ## Tuning LQR
 
-$Q$ and $R$ are hyperparameters. Scaling both $Q$ or $R$ together just scales the cost; doesn't affect the optimal controller. The relative scale of $Q$ nd $R$ is what matters, so typically you just set $R$ = 1 and tune $Q$. You are essentially weighing how much you care about "error" vs "effort". It's a good idea to think bout the units of $Q$ and $R$, and then scale them so they are similarly sized when in the same units.
+$Q$ and $R$ are hyperparameters. Scaling both $Q$ or $R$ together just scales the cost; doesn't affect the optimal controller. The relative scale of $Q$ and $R$ is what matters, so typically you just set $R$ = 1 and tune $Q$. You are essentially weighing how much you care about "error" vs "effort". It's a good idea to think bout the units of $Q$ and $R$, and then scale them so they are similarly sized when in the same units.
