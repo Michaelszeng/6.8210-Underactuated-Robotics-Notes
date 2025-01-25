@@ -27,11 +27,14 @@ May have other constraints (non-collision, input limits, etc.).
 To make this problem solvable, $u(t)$ will have to be parameterized by a finite number of decision variables. One can already see that the problem of parameterization is much easier for traj. opt. than solving for a global control policy; the dimension of the parameterization of $u(t)$ may grow linearly with time and state space dimension, while, i.e. for Value Iteration on a mesh, the dimension of the mesh grows exponentially with dimension of the state space.
 
 
-## Linear Systems, Discrete Time (Convex Optimization)
+### Note on Solvability
 
-Dynamics of the form: $x[n+1] = Ax[n] + Bu[n]$.
+In the case of non-convex costs and constraints/dynamics, the bottom line is that no traj. opt. method described here can guarantee global optimality. Direct Transcription, Direct Shooting, Direct Collocation will yield nonconvex optimization problems. Methods like iLQR can guarantee convergence to local minima. 
 
-### Direct Transcription
+To achieve/guarantee global optimality, usually convex relaxations (SOS programming, SDP relaxation), branch-and-bound methods (TODO: learn more), or, special cases with the system dynamics (i.e. differential flatness), are needed. Usually, SOS relaxations and branch-and-bound methods become too computationally expensive to be practical for real-time control.
+
+
+## Direct Transcription
 
 Goal:
 
@@ -56,7 +59,7 @@ Also note--$N$ must be selected manually; if $N$ were a decision variable of the
 
 Note that Direct Transcription can be used with non-linear systems--instead of constraining $x[n+1] = Ax[n] + Bu[n]$, you have $x[n+1] = f(x[n], u[n])$.
 
-#### Discretization Errors
+### Discretization Errors
 
 With discrete-time dynamics, there is some discretization error. For example, if you have continuous dynamics:
 
@@ -79,7 +82,7 @@ However, with discreet time systems, there is one discretization error that is n
 In general, Direct Transcription is the simplest and easiest for formulate, but the least accurate.
 
 
-### Direct Shooting
+## Direct Shooting
 
 In Direct Transcription, having $x[n]$ as a decision variable, and including the dynamics as a constraint, leads to both extra decision variables and constraints. Instead, we can just formulate our optimization as a single constraint, applying the dynamics in "forward simulation" for $n$ steps:
 
@@ -96,7 +99,9 @@ $$ \begin{align*}
 
 Except, if you want a $x[N] = x_f$ constraint, you would need to specify $x[N]$ as $A^Nx[0] + \sum_{k=0}^{N-1} A^{N-1-k}Bu[k]$.
 
-#### Drawbacks of Direct Shooting
+If your system dynamics are nonlinear, the principle of Direct Shooting still applies, you just compose the nonlinear dynamics.
+
+### Drawbacks of Direct Shooting
 
 Usually, numerically infeasible (requires explicitely computing $A^n$, which usually is not possible on a 64-bit machine).
 
@@ -109,53 +114,72 @@ Also, the "sparsity" of the constraints (each constraint touches a small number 
 Direct Transcription is more common in practice. Direct Shooting is generally only viable for simple trajectories with few/no constraints.
 
 
-## Non-Linear Systems, Discrete Time (Non-Convex Optimization)
 
-Direct Transcription and Direct Shooting still work, just becomes a nonconvex optimization.
+## Direct Collocation
 
-General formulation of Direct Transcription:
+Core idea: Instead of solving the continuous optimal control problem, discretize time into $N$ segments parameterized by polynomials (specifically as first-order polynomials, and cubic polynomials, respectively) and enforce system dynamics are carefully chosen collocation points. The decision variables are the state, control inputs, and state derivative at each breakpoint between segments.
 
-<center><img src="Media/direct_transcription_nonlinear.png" style="width:45%"/></center><br />
+This is still considered a "transcription" method, since we are still transcribing the continuous dynamics into discrete constraints enforced at certain time steps.
 
-General formulation of Direct Shooting is also ~identical to the linear formulation, except you compose the nonlinear dynamics.
+Direct collocation is generally used for nonlinear systems (assuming you don't liearize them) in the context of longer-horizon trajectory optimization, and solved with NLP solvers like SNOPT or IPOPT. For nonlinear systems, the smoothness and having no discretization error are important for accuracy and numerical stability. Also, for nonlinear systems, the polynomial trajectory parameterization can allow longer time steps and decrease overall variable and constraint count. However, for linear systems, direct transcription is almost always chosen over direct collocation. Firstly, trajectory optimization for linear systems, in practice, is usually done with short horizons in the context of a linearized nonlinear system, in which case small timesteps are fine and parameterizing the state trajectory as a cubic spline is just overkill/computationally more expensive. 
 
+For each interval $[t_k, t_{k+1}]$, the control input trajectory is parameterized by a linear function:
 
-### Direct Collocation
+$$u(t) = u_k + \frac{t - t_k}{h_k} (u_{k+1} - u_k)$$
 
-In general, the formulation is very similar to direct transcription, except the input trajectory and state trajectory are parameterized as piecewise polynomial functions (specifically as first-order polynomials, and cubic polynomials, respectively).
+where $u_k$ and $u_{k+1}$ are the control values at the breakpoints, and $h_k = t_{k+1} - t_k$ is the duration of this segment.
 
-The decision variables for the optimization are simply sample "breakpoints" in $u(t)$ and $x(t)$; for $u(t)$ (a first-order, linear polynomial), two breakpoints fully define the trajectory. For $x(t)$ (a cubic spline), two breakpoints, along with two derivatives at those breakpoints (which can be computed using system dynamics from $x(t)$ and $u(t)$), can fully define the $x(t)$ trajectory. 
+For each interval $[t_k, t_{k+1}]$, the state trajectory is parameterized by a cubic spline:
 
-Clarification: there is a separate 1st order hold for $u(t)$ and cubic polynomial for $x(t)$ between each breakpoints point.
+$$x(t) = a_k + b_k (t - t_k) + c_k (t - t_k)^2 + d_k (t - t_k)^3,$$
 
-Of course, the dynamics of the system must be encoded somewhere in the optimization. By choosing the collocation points at the midpoints (in the time-axis) between each breakpoint, the equations for cubic splines and first-order holds lend to these equations: 
+$a_k, b_k, c_k, d_k$ are the coefficients of the cubic polynomial which are fully determined by the state and state derivative at the start and end of the cubic spline:
 
-<center><img src="Media/collocation.png" style="width:45%"/></center><br />
+1. $x(t_k) = x_k$: State at the start of the interval.
+2. $x(t_{k+1}) = x_{k+1}$: State at the end of the interval.
+3. $\dot{x}(t_k) = \dot{x}_k$: Velocity at the start of the interval.
+4. $\dot{x}(t_{k+1}) = \dot{x}_{k+1}$: Velocity at the end of the interval.
 
-which ultimately lends to this constraint (enforcing dynamics at each collocation point given the state and control input at each breakpoint):
+i.e. if $x(t_k), x(t_{k+1}), \dot{x}(t_k), \dot{x}(t_{k+1})$ are known, then $a_k, b_k, c_k, d_k$ are fully determined. 
+
+The system dynamics are enforced at the collocation points, which are chosen as the midpoint of each interval: 
+
+$$ t_{c,k} = \frac{t_k + t_{k+1}}{2}$$
+
+For each interval $[t_k, t_{k+1}]$, we define these intermediate variables (called the collocation points) where the dynamics will be enforced:
+
+$$
+\begin{align*}
+\mathbf{u}(t_{c,k}) &= \frac{1}{2} \left( \mathbf{u}(t_k) + \mathbf{u}(t_{k+1}) \right), \\[8pt]
+\mathbf{x}(t_{c,k}) &= \frac{1}{2} \left( \mathbf{x}(t_k) + \mathbf{x}(t_{k+1}) \right) + \frac{h_k}{8} \left( \dot{\mathbf{x}}(t_k) - \dot{\mathbf{x}}(t_{k+1}) \right), \\[8pt]
+\dot{\mathbf{x}}(t_{c,k}) &= -\frac{3}{2h_k} \left( \mathbf{x}(t_k) - \mathbf{x}(t_{k+1}) \right) - \frac{1}{4} \left( \dot{\mathbf{x}}(t_k) + \dot{\mathbf{x}}(t_{k+1}) \right).
+\end{align*}
+$$
+
+The first two equations for $u(t_{c,k})$ and $x(t_{c,k})$ compute linear and cubic interpolations between the value of $u$ and $x$ at the breakpoints. The third equation for $\dot{x}(t_{c,k})$ evaluates the derivative of the cubic spline at the collocation point.
+
+Finally, then, the dynamics are applied at these collocation points: 
 
 $$ \dot{x}(t_{c,k}) = f(x(t_{c,k}), u(t_{c,k})) \quad \forall k \in [0, N-1]$$
 
-where each $t(k)$ is a breakpoint time, $h$ is the time step, and $t_{c,k}$ is a collocation point time. 
+Note that continuity of the state and control trajectories between segments is automatically enforced by simply using the same variable for adjacent segments.
 
-In general, the optimization is expressed like so:
+The full optimization is expressed like so:
 
 $$ \begin{align*}
-    \min_{\forall k. ~x[t_k], u[t_k]} \quad & l_f(x[N]) + \sum_{n=0}^{N-1} \Delta t * l(x[n], u[n]) \\
+    \min_{\forall k. ~x[t_k], u[t_k]} \quad & l_f(x[N]) + \sum_{n=0}^{N-1} h_k * l(x[n], u[n]) \\
     \text{subject to} \quad & \dot{x}(t_{c,n}) = f(x(t_{c,n}), u(t_{c,n})), & \forall n \in [0, N-1] \\
     & x[0] = x_0 \\
-    & \text{other constraints...}
+    & x[N] = x_f \\
+    & \text{other constraints, i.e. control inputs, etc...}
 \end{align*} $$
 
-(Sidenote: we're also multiplying $\Delta t$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost. However, you could use a more advanced integration method to calculate the cost than a simple Euler integration).
+(Sidenote: we're also multiplying the time step $h_k$ in the summation in the cost function because this is a continuous time formulation, where $\ell()$ returns the rate of change of cost. However, you could use a more advanced integration method to calculate the cost than a simple Euler integration).
 
-Most solvers will also allow you to apply an initial guess for $x[\cdot], u[\cdot]$.
-
-Note that, again, $N$ (the number of piecewise polynomial functions used to parameterize the trajectory), along with $\Delta t$, the time interval for each piecewise polynomial function, must be user-defined.
+$N$ (the number of piecewise polynomial functions used to parameterize the trajectory), along with $h_k$, the time interval for each piecewise polynomial function, must be user-defined. Obviously, larger $N$ and smaller $h_k$ results in more variables/constraints but higher trajectory fidelity. Ballpark choices might be $h_k = 0.05$, $N=50$ (for 2.5 second long trajectory).
 
 
-
-### Kinematic Trajectory Optimization
+## Kinematic Trajectory Optimization
 
 This is a somewhat different view on traj opt compared to transcription, shooting, collocation methods. This is less concerned about encoding dynamic constraints, and more concerned about kinematic feasibility (i.e. smoothness and respecting velocity/acceleration/higher-order derivative limits). It's strategy is to solve a smooth path in robot configuration space, and it assumes that such a path will be dynamically feasible (THIS ASSUMPTION IS NOT ALWAYS VALID. See last paragraph of this section). It is also formulated as an optimization problem.
 
@@ -178,21 +202,21 @@ There's one major flaw to Kinematic traj opt, and there's a reason it's not cove
 In general, kinematic trajectory optimization is good for fully-actuated, powerful robots where pure power can basically override the robot's dynamics, i.e. robot arms.
 
 
-## Trajectory Stabilization
+## Trajectory Stabilization / Tracking / Control
 
-The basic problem with direct transcription/shooting/collocation is that they solve for the trajectory given the initial state... and that is all. They don't use any feedback to ensure the robot actually follows that trajectory in real life.
+Direct transcription/shooting/collocation are methods of traj. opt. -- that is, they solve for the blind, feed-forward trajectory given the initial state... and that is all. They don't use any feedback to ensure the robot actually follows that trajectory.
 
-Therefore, direct transcription/shooting/collocation are not enough in real life. Real life has small disturbances (plus, if you are using Euler Integration or an approximated method of integration to roll forward your dynamics, this introdues more inaccuracy) that will cause the system to miss the trajectory.
+Therefore, direct transcription/shooting/collocation are not enough in real life. Real life has small disturbances (plus, if you are using Euler Integration or an approximated method of integration to roll forward your dynamics, this introduces more inaccuracy) that will cause the system to miss the trajectory.
 
 This is where Trajectory Stabilization comes into play.
 
-### Local LQR (Linearizing around Trajectory)
+### Time-Varying LQR (Linearizing around Trajectory)
 
-Call $x_0(t)$ and $u_0(t)$ the trajectory points at time $t$. We will linearize around these points.
+Call $x_0(t)$ and $u_0(t)$ the trajectory points at time $t$. We will linearize the system dynamics around these points.
 
-Then, $\tilde{x}(t) = x(t) - x_0(t)$ and $\tilde{u}(t) = u(t) - u_0(t)$.
+Also, define error coordinates: $\tilde{x}(t) = x(t) - x_0(t)$ and $\tilde{u}(t) = u(t) - u_0(t)$.
 
-Performing the linearization using a 1st-order Taylor Series:
+Performing the linearization of the dynamics using a 1st-order Taylor Series:
 
 $$\begin{align*}
     \dot{x}(t) &= f(x_0(t), u_0(t)) + \frac{\delta f}{\delta x} \bigg |_{x_0(t),u_0(t)}(x-x_0) + \frac{\delta f}{\delta u}\bigg |_{x_0(t),u_0(t)} (u-u_0) \\ 
@@ -203,44 +227,109 @@ $$\begin{align*}
 
 Notice how $A$ and $B$ are no longer constant--we call this now a time-varying system.
 
-LQR still works even if $A$ and $B$ are time-varying, and given a finite horizon ($t_f$ = time trajectory ends). The problem formulation looks almost identical to classic LQR:
+LQR still works even if $A$ and $B$ are time-varying, and given a finite horizon ($t_f$ = time trajectory ends). The problem formulation looks almost identical to classic LQR (the last $\tilde{x}^\top Q_f \tilde{x}$ term is a terminal cost):
 
-$$ \min_{u(t)} \int_{0}^{t_f} \tilde x^T(t)Q \tilde x(t) + \tilde u^T(t)R \tilde u(t) ~dt $$
+$$ J^*(\tilde{x}(t_{\text{now}}), t_{\text{now}}) = \min_{u(t)} \int_{t_{\text{now}}}^{t_f} \tilde x^\top(t)Q \tilde x(t) + \tilde u^\top(t)R \tilde u(t) ~dt + \tilde{x}^\top Q_f \tilde{x}$$
 
-$$\dot{\tilde x}(t) = A(t) \tilde x(t) + B(t) \tilde u(t)$$
+$$\dot{\tilde x}(t) = A(t) \tilde x(t) + B(t) \tilde u(t) \quad \forall t \in [t_{\text{now}}, t_f]$$
 
-The solution looks like this (the optimal cost-to-go is now a function of time because the horizon is finite (intuitively, being at a far-away state at $t=0$ is much less bad thn being at a far-away state at $t$ close to $t_f$))  (where $S(t) \succ 0$):
+The solution looks like this (the optimal cost-to-go is now a function of time because the horizon is finite (intuitively, being at a far-away state at $t=0$ is much less bad than being at a far-away state at $t$ close to $t_f$))  (where $S(t) \succ 0$):
 
-$$J^*(x,t) = \tilde x^TS(t) \tilde x $$
+$$J^*(\tilde{x},t) = \tilde x^TS(t) \tilde x $$
 
 $$\tilde u^* = -K(t) \tilde x$$
 
 This simple control strategy--re-linearizing and re-applying LQR with a finite-horizon at a fixed loop speed--can achieve very robust control with real world disturbances.
 
-Note: LQR assumes the target state can be reached by $t_f$. In the classic (infinite-horizon) LQR case, the target state can obviously be reached in infinite time. In the finite-horizon LQR case, we are giving the controller authority over the duration of the trajectory.
-
 Note: using LQR to solve means we cannot add other constraints like input limits or state constraints.
 
 Note: you ***can*** have even $Q$ and $R$ be functions of time.
 
-Note: Having a cost-to-go function that is a function of time --> HJB equation is slightly different (has additional partial derivative w.r.t time term): 
-$$ 0 = \min_u \bigg [\ell(x, u) + \frac{\delta J^*}{\delta  x} \bigg|_{x,t} f_c(x, u) + \frac{\delta J^*}{\delta  t} \bigg|_{x,t} \bigg ] $$
+#### Derivation of Control Policy
 
-This means the solution for $S(t)$ is also different: $Q-S(t)B(t)R^{-1}B^T(t)S(t) + 2S(t)A(t) = -\dot{S}(t)$
+Having a cost-to-go function that is a function of time --> HJB equation is slightly different (has additional partial derivative w.r.t time term): 
 
+$$ 0 = \min_{\tilde{u}} \bigg [\ell(\tilde{x}, \tilde{u}) + \frac{\delta J^*}{\delta  \tilde{x}} \bigg|_{\tilde{x},t} f_c(t, \tilde{x}, \tilde{u}) + \frac{\delta J^*}{\delta  t} \bigg|_{\tilde{x},t} \bigg ] $$
 
+Solving this out (assuming, again, the optimal cost-to-go function is of the form $J^*(\tilde{x},t) = \tilde x^TS(t) \tilde x $):
+
+$$\frac{\delta J^*}{\delta t} = \tilde{x}^\top \dot{S}(t) \tilde{x}$$
+
+$$\frac{\delta J^*}{\delta \tilde{x}} = 2 \dot{S}(t) \tilde{x}$$
+
+The HJB equation becomes:
+
+$$0 = \min_{\tilde{u}} \tilde{x}^\top Q \tilde{x} + \tilde{u}^\top R \tilde{u} + 2 \tilde{x}^\top S(t) (A(t) \tilde{x} + B(t) \tilde{u}) + \tilde{x}^\top \dot{S}(t) \tilde{x}$$
+
+Taking the derivative w.r.t. $\tilde{u}$ and setting to 0:
+
+$$\frac{\delta}{\delta \tilde{u}} (\tilde{u}^\top R \tilde{u} + 2 \tilde{x}^\top S(t) B(t) \tilde{u}) = 0$$
+
+$$\tilde{u}^*(t) = R^{-1} B^\top(t) S(t) \tilde{x}(t)$$
+
+$$K(t) = R^{-1} B^\top(t) S(t)$$
+
+We substitute out solution for $\tilde{u}^*(t)$ back into the HJB equation to get what's called the *Riccati Differential Equation*. This is, in general, hard to solve for $S(t)$, and usually is approximated using numerical integration with small $\Delta t$ backwards in time from the terminal value $S(T) = Q_f$ (which is true since the cost-to-go at termination is $\tilde{x}x^\top Q_f \tilde{x}$, assuming the terminal cost defined above)):
+
+$$Q-S(t)B(t)R^{-1}B^T(t)S(t) + 2S(t)A(t) = -\dot{S}(t)$$
+
+<br />
+
+#### Discrete-Time Time-Varying LQR
+
+Briefly, here, we outline the equations and derivation for the discrete-time version of Time-Varying LQR. This is usually preferred in practice since solving $S(t)$ in the discrete-time case doesn't require integration, and rather just some backwards recursion of algebra evaluating matrix-algebra expressions.
+
+In Discrete-Time Time-Varying LQR, we try to minimize the cost summed over the remaining time steps (if the current time step is $t$) subject to dynamics:
+
+$$ J^*(\tilde{x}_t, t) = \min_{\tilde{u}_k} \sum_{k=t}^{N-1} (\tilde{x}_k^\top Q \tilde{x}_k + \tilde{u}_k^\top R \tilde{u}_k) + \tilde{x}_N^\top Q_f \tilde{x}_N,$$
+$$ \tilde{x}_{k+1} = A_k \tilde{x}_k + B_k \tilde{u}_k, \quad \forall k=t,...,N-1$$
+
+Again, assume cost-to-go function of the form:
+
+$$ J^*(\tilde{x}_k, k) = \tilde{x}_k^\top S_k \tilde{x}_k$$
+
+In the case of terminal cost $\tilde{x}^\top_N Q_f \tilde{x}_N$, the cost-to-go at termination is $\tilde{x}^\top_N Q_f \tilde{x}_N$, so $S_N = Q_f$.
+
+We solve for the optimal control input at timestep $k$ by simply solving the minimization of the Bellman Equation:
+
+$$ J^*(\tilde{x}_k, k) = \min_{\tilde{u}_k} [l(\tilde{x}_k, \tilde{u}_k) + J^*(f(\tilde{x}_k, \tilde{u}_k))] $$
+
+$$ J^*(\tilde{x}_k, k) = \min_{\tilde{u}_k} \left[ \tilde{x}_k^\top Q \tilde{x}_k + \tilde{u}_k^\top R \tilde{u}_k + J^*(\tilde{x}_{k+1}) \right] $$
+
+$$ J^*(\tilde{x}_k, k) = \min_{\tilde{u}_k} \left[ \tilde{x}_k^\top Q \tilde{x}_k + \tilde{u}_k^\top R \tilde{u}_k + (A_k \tilde{x}_k + B_k \tilde{u}_k)^\top S_{k+1} (A_k \tilde{x}_k + B_k \tilde{u}_k) \right] $$
+
+We take the derivative of $J^*(\tilde{x}_k)$ w.r.t. $\tilde{u}_k$ and set it to 0. We omit the algebra for conciseness: 
+
+$$ \tilde{u}_k^* = -\left( R + B_k^\top S_{k+1} B_k \right)^{-1} B_k^\top S_{k+1} A_k \tilde{x}_k$$
+
+Therefore, the optimal control law is:
+
+$$ \tilde{u}_k^* = -K_k \tilde{x}_k $$
+$$ K_k = \left( R + B_k^\top S_{k+1} B_k \right)^{-1} B_k^\top S_{k+1} A_k$$
+
+We still must solve for $S_k$. Therefore, plugging our solution for $ \tilde{u}_k^* $ back into the cost-to-go function:
+
+$$ J^*(\tilde{x}_k, k) = \tilde{x}_k^\top Q \tilde{x}_k + \tilde{x}_k^\top \left( A_k^\top S_{k+1} A_k - A_k^\top S_{k+1} B_k \left( R + B_k^\top S_{k+1} B_k \right)^{-1} B_k^\top S_{k+1} A_k \right) \tilde{x}_k $$
+
+And, realizing that both sides of the equation are encompassed by $\tilde{x}_k^\top [...] \tilde{x}_k$:
+
+$$S_k = Q + A_k^\top S_{k+1} A_k - A_k^\top S_{k+1} B_k \left( R + B_k^\top S_{k+1} B_k \right)^{-1} B_k^\top S_{k+1} A_k$$
+
+This equation is called the Backward Riccati Recursion. To solve for $S_k$, we just recurse from $S_N = Q_f$ back to $S_k$.
 
 
 #### Limitation of Time-Varying Linearization
 
 Trajectories are solved as functions of time. Therefore, if there are unexpected forces/dynamics applied on the system, the nominal point around which linearization is done, $x_0, u_0$, will continue moving forward in time even though the system is no longer following the trajectory; in this case, $\tilde{x}$ and $\tilde{u}$ can increase significantly, making the linearization less and less accurate. The control policy can fail in this case.
 
-Simply remapping time by always performing the linearization around the nearest $x, u$ on the trajectory to the current $x, u$, can introduce other instabilities, so is not a good option either. TODO: give example
+Simply remapping time by always performing the linearization around the nearest $x, u$ on the trajectory to the current $x, u$, can introduce other instabilities, so is not a good option either.
+
+<br />
 
 
 ### Time-Varying Lyapunov
 
-If we locally linearize as with the "Local LQR" method, we can analyze the stability of the resulting time-varying system. We can write time-varying Lyapunov conditions:
+If we locally linearize as with the "Time-Varying LQR" method, we can analyze the stability of the resulting time-varying system. We can write time-varying Lyapunov conditions:
 
 $$\forall t \quad V(x, t) \succ 0, ~V(0, t) = 0$$
 $$ \dot{V}(t, x) = \frac{\delta V}{\delta x} f(x) + \frac{\delta V}{\delta t} \preceq 0$$
@@ -262,31 +351,100 @@ where $d$ is a fixed positive integer, and we use the appropriate $A(t), B(t), K
 Knowing $\rho(t)$ gives us an idea of the size of the region of stability for the system and controller (this is simply an analysis tool).
 
 
-### Model Predictive Control (MPC)
+## Model Predictive Control (MPC)
+
+MPC is yet another interpretation of trajectory optimization and tracking. The core idea is simply to perform a receding horizon optimization at every timestep to determine the optimal control.
+
+There are roughly 2 different "categories" of MPC: 
+
+1. A higher-level planner generates a desired trajectory, and MPC is used to track it. The cost function is deviation from the desired trajectory.
+
+2. MPC is used to reach a desired setpoint or some higher level objective.
+
+Note: Time-varying LQR is similar to category 1 but does not exactly fall under MPC; namely, because it doesn't solve a receding horizon optimization; the horizon is the remaining duration of the input trajectory.
+
+The basic steps for any MPC implementation:
 
 **Repeat every time step:**
 1. Estimate current state $\hat{x}$
 2. Solve traj opt w/ $x[0] = \hat{x}$ for $N$ steps into the future ("receding horizon"), i.e. using direct collocation
 3. Execute $u[0]$ and let dynamics evolve
 
-Note: you must solve the traj opt multiple steps into the future even if you discard $u[1] ... u[N]$, since you cannot have an "optimal control" unless you consider the future.
-
-Recursive feasibility is an important notion: if a feasible solution is found in one time step, it should not be lost in future time steps. The basic formultion of MPC does not have this; by having a receding horizon, essentially every time step, MPC adds a new constraint at a future time that has not been considered before; this constraint could cause sudden infeasibility. There are a few ideas to combat this:
- - Add a constraint that $x[k+N+1] = x^*$ (where $k$ is the current time step), where $x^*$ is the target state at the end of the trajectory. If the controller can get to $x^*$ by $t = k + N$, then it is sure to be feasible to get there in time steps beyond that. (This only works for short trajectories or very long horizons)
-    - Extension: if you can define a "safe set" where you know the system can converge to $x^*$ from this set, constraint $x[k+N+1]$ to be in this set.
- - "heuristic penalty / heuristic constraint on the last couple of states" - TODO: update this
+Every MPC implementation needs a "trajectory optimization block"; as we'll discuss below, this block is interchangeable; i.e. you can use Direct Transcription traj. opt., or Direct Collocation, or iLQR, etc.
 
 
-### Linear Model Predictive Control (MPC)
+### Linear MPC
 
-Same principle as MPC, but perform a linearization of the system around the current state at each time step, then perform linear optimal control (general MPC might just do a nonlinear optimization), i.e. with direct transcription or direct shooting. The reason for this is that convex optimization can give you guarantees of optimality and feasibility that non-convex optimization cannot.
+At the bottom of *2) Value Iteration & LQR*, in section *Linear Quadratic Regulator $\rightarrow$ Discrete Time, Finite Horizon Case*, we already discussed practical methods for discrete-time receding-horizon LQR to stabilize to a setpoint. That literally is MPC; it's MPC with linear dynamics and cost function of the form $x^\top Q x + u^\top R u$.
 
-This is also very similar to Local LQR, except we don't restrict ourselves to an LQR cost and optimization, so Linear MPC can still solve optimizations with other linear constraints (i.e. control input limits). 
+In addition, discrete-time receding-horizon LQR can be seen as an instance of MPC with Direct Transcription trajectory optimization since it solves the trajectory by rolling out the dynamics one time step at a time. Direct Transcription is the most common "trajectory optimization block" used in MPC by far -- it's simple. But it's not the only option; you *can* use direct collocation, but for reasons explained in the *Direct Collocation* section, this is basically never a good idea for linear MPC. For nonlinear MPC, as explained below, iLQR is also a common choice for the "trajectory optimization block".
 
-The downside to Linear MPC compared to Local LQR is computation -- if your cost is quadratic, you must solve a generic QP instead of an LQR problem (which has an analytical soln.).
+In the presence of additional linear constraints (i.e. control input limits), as has already been discussed, you can no longer use the tools of LQR (i.e. solving the HJB equation using a known cost-to-go function; since the cost-to-go function usually isn't known) to analytically solve the optimal control input. Instead, you have to formulate the optimization as a general QP. There is significant research on QP solvers that warm-start, give a bound of worst case solve time, etc., as almost all practical implementations of MPC solve QPs (on *linearized* dynamics). A common (?) trick is to use LQR if you know you are far from the linear constraints, and switch to solving your QP's otherwise. 
 
-You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are far from the linear constraints, and switching to MPC otherwise. Local LQR is more computationally efficient, and Local LQR is more tractable for analysis (i.e. SOS optimization for verifying regions of attraction).
 
+### Nonlinear MPC
+
+Linear MPC is the most computationally-tractable formulation of MPC, but hardly any systems have linear dynamics and cost function of the form $x^\top Q x + u^\top R u$. 
+
+Using iLQR (details below) for the "trajectory optimizaiton block", for nonlinear MPC, is perhaps the closest analog to using discrete-time finite-horizon LQR for linear MPC. iLQR basically iteratively solves LQR problems using progressively better linear approx. of the system dynamics and quadratic approx. of the cost function. The iterative nature of iLQR means it can be easily warmstarted, so few iterations are usually needed, making this not much more expensive than Linear MPC.
+
+iLQR is not the only method relying on linear approx. of the system dynamics and quadratic approx. of the cost function. Boston Dynamics' Atlas pipeline (at least my hypothesis of how it works) is a great example. They take a single linear approximation of the dynamics, and have a receding-horizon quadratic cost penalizing error from a reference trajectory that was generated by a higher-level planner. This results in a direct transcription/shooting QP:
+
+$$\mathbf{x}[n+1] \approx \mathbf{A}_n \mathbf{x}[n] + \mathbf{B}_n \mathbf{u}[n],$$
+$$J = \sum_{n=0}^{N-1} \left( \|\mathbf{x}[n] - \mathbf{x}_{\text{ref}}[n]\|_{\mathbf{Q}}^2 + \|\mathbf{u}[n]\|_{\mathbf{R}}^2 \right),$$
+
+They solve these QP's quickly using warm-starting with OSQP (an ADMM-based QP solver) (they probably also have other linear constraints on torque limits, friction cones on the feet, etc.). Compared to iLQR, this is less accurate since it uses a single linearization of the dynamics for all time steps, but it is much faster (since it doesn't require multiple iterations). This method is intended to be run with short horizons and *very* fast, i.e. 1000 hz. Of course, this method also handles additional linear constraints while iLQR natively doesn't.
+
+Direct Collocation is very rare nonlinear MPC and only used in specific cases. Of course, it yields a difficult nonlinear optimization which is not good for any safety-critical control. The only case it should be considered is for long-horizon planning at low rates, where the parameterization of the trajectory as piecewise polynomials allows few variables/constraints even for long horizons that *can* be solved (not very quickly) using SNOPT or IPOPT. 
+
+
+### Recursive Feasibility
+
+Generally only a concern when solving non-convex MPC problems.
+
+Principle: if a feasible solution is found in one time step, it should not be lost in future time steps. The basic formulation of MPC does not have this; by having a receding horizon, essentially every time step, MPC adds a new constraint at a future time that has not been considered before; this constraint could cause sudden infeasibility. 
+
+Personally, I don't see how these solutions are useful/applicable, but:
+- Add terminal penalty (or terminal penaltie*s*, on multiple states close to the end of the horizon) based on error from a target state or target set. This guides the system towards a known feasible region.
+- Add terminal constraint, i.e. forcing the system to reach the target state by the end of the horizon. The idea is that, if the system found a feasible solution to reach the target state at time step 0, it'll only get closer to the target state over time, so the problem becomes easier over time, so it won't lose the ability to reach the target state.
+    - Really only applicable for low-rate, long-horizon MPC.
+
+
+### Penalty Methods in MPC
+
+Modern approaches (i.e. Skydio) avoid the recursive feasibility problem by having the optimization problem be unconstrained. This is called the Method of Multipliers.
+
+The idea is simple: transform the problem
+
+$$ \begin{align*}\min_{x, u} \quad & J(x,u) \\
+\text{subject to} \quad & h(x,u)=0 \\
+& g(x,u)\leq 0 \\
+\end{align*}$$
+
+Into its augmented lagrangian form with parameter $\rho$ and dual variables $\lambda, \mu$: 
+
+$$ \mathcal{L}(x, u, \lambda, \mu) = \mathcal{J}(x, u) + \lambda^\top h(x, u) + \frac{\rho}{2} \| h(x, u) \|^2 + \mu^\top \max(0, g(x, u)) + \frac{\rho}{2} \max(0, g(x, u))^2, $$
+
+The optimization alternates between minimizing $\mathcal{L}(x, u, \lambda, \mu)$ and performing dual update steps:
+
+$$ \begin{align*}
+\lambda^{k+1} &= \lambda^k + \rho h(x, u), \\
+\mu^{k+1} &= \max(0, \mu^k + \rho g(x, u)).
+\end{align*} $$
+
+Of course, larger $\lambda$ and $\mu$ results in stricter constraint enforcement.
+
+This alternating optimization balances constraint enforcement with cost minimization, without having to explode $\rho$ and causing numerical instability.
+
+For computational efficiency, also, "soft constraints", or constraints that are not critical to be enforced, do not need corresponding dual variable and a dual update; they can just be softly penalized using the $\rho$ term.
+
+Often (in the case of non-linear dynamics/non-quadratic cost), $\mathcal{L}(x, u, \lambda, \mu)$ is left as a non-convex unconstrained optimization problem and the minimization is "solved" (with limited accuracy) using NLP methods like gradient descent or Gauss-Newton. Warm-starting is critical in these cases; the cost landscape may shift slightly between time steps, but your solution from the previous time step is most likely still quite good/close to the same local minima; you can just continue your gradient descent for a few iterations (and carry over your previous values for $\lambda$ and $\mu$).
+
+
+
+### Robust MPC
+
+TODO
 
 
 ## Case Study: Perching Plane
@@ -301,9 +459,9 @@ You can, in fact combine Local LQR and Linear MPC, using LQR if you know you are
 
 iLQR full code example: https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/10-Trajectory-Optimization-Duplicate-604fbbf9-5cbe-438f-ab43-250212f50cd7/notebook/ilqr_driving-6003b030a7da40b2ab690aa54e6242d9
 
-iLQR is a method of *trajectory optimization* (comparable to Direct Collocation or Direct Transcription). It is frequently paired with trajectory stabilization techniques like MPC.
+iLQR is a method of *trajectory optimization*. It is frequently paired with MPC.
 
-The algorithm begins with an initial guess for the trajectory (i.e. linear interpolation between initial and target state) $\bar{\mathbf{x}}[\cdot], \bar{\mathbf{u}}[\cdot]$, and iteratively switches between solving Local LQR-like problems along the trajectory using approximated costs/dynamics to calculate the optimal control, and rolling these controls forward (with true costs/dynamics) to evaluate true performance of the controller and derive a new "guess" for the trajectory.
+The algorithm begins with an initial guess for the trajectory (i.e. linear interpolation between initial and target state) $\bar{\mathbf{x}}[\cdot], \bar{\mathbf{u}}[\cdot]$, and iteratively switches between solving Time-Varying LQR-like problems along the trajectory using approximated costs/dynamics to calculate the optimal control, and rolling these controls forward (with true costs/dynamics) to evaluate true performance of the controller and derive a new "guess" for the trajectory.
 
 <!-- (note that $\bar{\mathbf{u}}[\cdot]$ does not matter in the initial guess--it will be overridden in the first ).  -->
 
@@ -314,7 +472,7 @@ The algorithm begins with an initial guess for the trajectory (i.e. linear inter
 The Q-function is a recursive measure of total cost. It is defined according to the Bellman equation (recall that $Q$ is dependent on both state and action; $V$ is only dependent on state assuming you take the optimal action at that state ($Q(x[n], u^*[n]) = V(x[n])$)):
 
 $$ Q(\mathbf{x}[n], \mathbf{u}[n]) = \ell(\mathbf{x}[n], \mathbf{u}[n])  + V(\mathbf{x}[n+1]) $$
-$$ V(\mathbf{x}[n]) = \ell_f(\mathbf{x}[N]) $$
+$$ V(\mathbf{x}[N]) = \ell_f(\mathbf{x}[N]) $$
 
 In other words, each backward pass, our primary goal is (with a quadratic approximation of the Q-function), for all $n$:
 
@@ -329,7 +487,7 @@ To solve this $\arg\!\min_{\delta \mathbf{u}[n]}$ problem, we need to express $Q
 
 $$ \begin{aligned} Q(\mathbf{x}[n], \mathbf{u}[n]) & \approx \ell_n + \begin{bmatrix}\ell_{\mathbf{x},n} \\  \ell_{\mathbf{u},n} \end{bmatrix} ^T  \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} + \frac{1}{2}\begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} ^T \begin{bmatrix}\ell_{\mathbf{xx},n} &  \ell_{\mathbf{ux},n}^T\\  \ell_{\mathbf{ux},n} & \ell_{\mathbf{uu},n}\end{bmatrix} \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix}, \\ & \quad + V_{n+1} + V_{\mathbf{x},n+1}^T  \delta \mathbf{x}[n+1] + \frac{1}{2}\delta \mathbf{x}[n+1]^T V_{\mathbf{xx},n+1} \delta \mathbf{x}[n+1], \\& = Q_n + \begin{bmatrix} Q_{\mathbf{x},n} \\  Q_{\mathbf{u},n} \end{bmatrix} ^T  \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} + \frac{1}{2}\begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix} ^T \begin{bmatrix} Q_{\mathbf{xx},n} & Q_{\mathbf{ux},n}^T\\  Q_{\mathbf{ux},n} & Q_{\mathbf{uu},n}\end{bmatrix} \begin{bmatrix} \delta \mathbf{x}[n] \\ \delta \mathbf{u}[n] \end{bmatrix}.\end{aligned} $$
 
-We'll need to expand out $\delta \mathbf{x}[n+1]$ in terms of $\mathbf{x}$ and $\mathbf{u}$:
+We'll need to expand out $\delta \mathbf{x}[n+1]$ in terms of $\mathbf{x}$ and $\mathbf{u}$ (using a 1st order Taylor expansion):
 
 $$
 \begin{aligned}
@@ -389,7 +547,7 @@ That is all that's needed to compute the optimal control input $\delta \mathbf{u
 <center><img src="Media/ilqr_expected_cost_reduction.jpg" style="width:52%"/></center><br />
 
 
-Note: regularization is also typically also included to ensure $Q_{uu}$ is positive definite (and invertible). See [https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/10-Trajectory-Optimization-Duplicate-604fbbf9-5cbe-438f-ab43-250212f50cd7/notebook/ilqr_driving-6003b030a7da40b2ab690aa54e6242d9] for an example.
+Note: regularization is also typically also included to ensure $Q_{uu}$ is positive definite (and invertible). Since $Q_{uu}$ is the quadratic term (in $u$) of the quadratic cost approximation, $Q_{uu}$ being positive definite ensures that the quadratic cost approximation has a global minimum (i.e. the quadratic bowl is rightside-up and now upside-down). See [https://deepnote.com/workspace/michael-zengs-workspace-61364779-69ef-470a-9f8e-02bf2b4f369c/project/10-Trajectory-Optimization-Duplicate-604fbbf9-5cbe-438f-ab43-250212f50cd7/notebook/ilqr_driving-6003b030a7da40b2ab690aa54e6242d9] for an example.
 
 2. Forward Pass: Now that the backward pass has solved $\delta \mathbf{u}[n]^*$, the forward pass applies $\delta \mathbf{u}[n]^*$ to the original (nonlinear) system dynamics for each time step in the trajectory, while keeping track of running total cost. (This is as simple as it sounds). This will result in a new, likely different $\mathbf{x}[n], \mathbf{u}[n]$ than the nominal trajectory. 
 
@@ -408,7 +566,7 @@ iLQR will not solve globally optimal trajectory optimization because the optimiz
 
 #### Main Advantage of iLQR
 
-The primary advantage is for nonlinear systems; for any of the other methods described above (direct transcription, direct shooting, direct collocation), non-convex optimization is required to solve. Meanwhile, iLQR can rely on only convex optimization (at the expense of sacrificing global optimality), which makes it generally more computationally efficient.
+iLQR adapts to nonlinear systems; for any of the other methods described above (direct transcription, direct shooting, direct collocation), non-convex optimization is required to solve. Meanwhile, iLQR can rely on only convex optimization (at the expense of sacrificing global optimality), which makes it generally more computationally efficient. iLQR is also well-suited for warm-starting applications, such as MPC.
 
 
 

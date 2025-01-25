@@ -248,7 +248,7 @@ Math Note: $\frac{\delta J^*}{\delta  x} \bigg|_x f_c(x, u)$ can be seen as the 
 
 LQR is one tool for linear systems that we can derive from HJB.
 
-LQR solves optimal control for a system with Linear dynamics + infinite horizon quadratic cost, where the goal is to stabilize to $x^* = 0$ with minimum cost (at the bottom of the quadratic cost function). 
+LQR solves optimal control for a system with Linear dynamics + infinite horizon quadratic cost, where the goal is to stabilize to $x^* = 0$ with minimum cost (if you wanted to stabilize to any other setpoint $x^* \neq 0$, you could transform your coordinate system into error coordinates relative to $x*$). 
 
 More specifically, LQR works on system dynamics of the form:
 
@@ -288,11 +288,11 @@ $$ u^*(x) = -R^{-1} B^T Sx = -Kx$$
 
 which is linear in $x$ (we defined a new variable here $K$ for convenience).
 
-However, we still need to find the optimal $S$. We can plug $u^*$ back into HJB:
+However, we still need to find the optimal $S$. We can plug $u^*$ back into HJB to get this Algebraic Riccati Equation (which we can solve for $S$):
 
 $$ 0 = x^T[Q-SBR^{-1}B^TS + 2SA]x $$
 
-And have your numerical toolbox solve this equation for $S$.
+TODO: discuss numerical methods for solving the Algebraic Riccati Equation for $S$
 
 LQR works for a variety of systems; even systems without linear dynamics or quadratic cost, you can take linear/quadratic approximations and still get good control.
 
@@ -300,22 +300,50 @@ If, for example,you want to stabilize to a fixed point other than $x=0$, you can
 
 ### Discrete Time, Finite Horizon Case
 
-This definition of $S$ and $K$ only holds in the infinite horizon LQR case; in discrete-time, finite horizon LQR, which might be more common in a practical implementation of MPC, $S$ becomes a function of time. $S_t$ is calculated recursively using the Ricatti recurrence, from $t=T$ to $t=1$:
+This definition of $S$ and $K$ only holds in the infinite horizon LQR case; in discrete-time, finite horizon LQR, which might be more common in a practical implementation of MPC, $S$ and $K$ become functions of time. Let's outline the derivation briefly:
 
-$$S_t = Q + A^\top S_{t+1} A - A^\top S_{t+1} B (R + B^\top S_{t+1} B)^{-1} B^\top S_{t+1} A,
-$$
+In discerte-time finite-horizon LQR, our objective takes the form (note that we add a terminal penalty on any error at termination), subject to dynamics constraints:
 
-The base case, $S_T$, is computed explicitely; often using $S_T = x_T^\top Q x_T$ to penalize any terminal state error (assuming no more control input at termination).
+$$ J = \sum_{k=0}^{N-1} (x_k^\top Q x_k + u_k^\top R u_k) + x_N^\top Q_f x_N, $$
+$$ x_{k+1} = A x_k + B u_k, \quad \forall k=0,...,N-1$$
 
-The control policy also differs:
+We assume, again, our cost-to-go function is of the form (for some matrix $S_k$, to be determined):
 
-$$K_t = \left(R + B^\top S_{t+1} B\right)^{-1} B^\top S_{t+1} A. $$
+$$ J^*(x_k) = x_k^\top S_k x_k, $$
 
-The derivation for $S_t$ and $K_t$ is simpler in the discrete time-case; if you simply solve the analytical solution of $\min_{u_t} [l(x_t, u_t) + J^*(f(x_t, u_t))]$, you get the recursive equations for $K_t$ and $S_t$ seen above. This minimization ($\min_{u_t} [l(x_t, u_t) + J^*(f(x_t, u_t))]$), although entirely intuitive, is named the  "Discrete-Time Bellman Equation", and is considred the discrete-time analog of HJB.
+Note that, at termination ($k=N$), the cost-to-go is the terminal cost $x_N^\top Q_f x_N$, so $S_N = Q_f$.
+
+To solve the optimal control input $u_k$ at time step $k$, we mininimize the cost-to-go function at $x_k$:
+
+$$ J^*(x_k) = \min_{u_k} [l(x_k, u_k) + J^*(f(x_k, u_k))]$$
+
+$$ J^*(x_k) = \min_{u_k} \left[ x_k^\top Q x_k + u_k^\top R u_k + (A x_k + B u_k)^\top S_{k+1} (A x_k + B u_k) \right] $$
+
+Note: This minimization ($\min_{u_t} [l(x_t, u_t) + J^*(f(x_t, u_t))]$), although entirely intuitive, is named the  "Discrete-Time Bellman Equation", and is considered the discrete-time analog of the HJB sufficiency theorem.
+
+If we take the derivative of $J^*(x_k)$ w.r.t. $u_k$ and set to 0 (details/algebra ommitted for conciseness), we get that:
+
+$$ u_k^* = -\left( R + B^\top S_{k+1} B \right)^{-1} B^\top S_{k+1} A x_k $$
+
+Therefore, the control policy at time step $k$ is:
+
+$$ u_k^* = -K_k x_k$$
+$$K_k = \left( R + B^\top S_{k+1} B \right)^{-1} B^\top S_{k+1} A $$
+
+Now, we still need to solve for $S_k$. Therefore, we plug our solution for $u^*_k$ back into our equation for $J^*(x_k)$:
+
+$$ J^*(x_k) = x_k^\top Q x_k + x_k^\top \left( A^\top S_{k+1} A - A^\top S_{k+1} B \left( R + B^\top S_{k+1} B \right)^{-1} B^\top S_{k+1} A \right) x_k. $$
+
+And, realizing that both sides of the equation are encompassed by $\tilde{x}_k^\top [...] \tilde{x}_k$:
+
+$$ S_k = Q + A^\top S_{k+1} A - A^\top S_{k+1} B \left( R + B^\top S_{k+1} B \right)^{-1} B^\top S_{k+1} A $$
+
+This equation is called the Backward Riccati Recursion. To solve for $S_k$, we just recurse from $S_N = Q_f$ back to $S_k$.
+
 
 ### Batch Solution (for Discrete Time, Finite Horizon Case)
 
-Usually, for the most computationally efficient real-time LQR control, using the optimal control policy is what you want. But, there is a different numerical method to solve for the whole optimal control trajectory in batch that may be desirable in certain cases; for example, if your system has other linear constraints, they can easily be added and this batch minimization can be solved efficiently as a QP instead of taking the analytiical minimum of the quadratic cost. Or, if your goal is more-so trajectory optimization than control (i.e. you only want to know $u_t^*$ for your given $x_{\text{init}}$ and you do not care about a general control policy), this method is more efficiently computes a single trajectory.
+Usually, for the most computationally efficient real-time LQR control, using the optimal control policy is what you want. But, there is a different numerical method to solve for the whole optimal control trajectory in batch (i.e. by solving a single matrix linear system) that may be desirable in certain cases; for example, if your system has other linear constraints, they can easily be added and this batch minimization can be solved efficiently as a QP instead of taking the analytical minimum of the quadratic cost. Or, if your goal is more-so trajectory optimization than control (i.e. you only want to know $u_t^*$ for your given $x_{\text{init}}$ and you do not care about a general control policy), this method is more efficiently computes a single trajectory.
 
 The core idea of this method is to use forward simulation to get rid of the $x$ decision variables and to batch everything into large matrices for efficient computation:
 
